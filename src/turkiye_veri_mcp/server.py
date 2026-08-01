@@ -40,6 +40,16 @@ _MAX_LIST = 60
 _MAX_CODES_SHOWN = 40
 
 
+@app.custom_route("/healthz", methods=["GET"])
+async def _healthz(request):
+    # Plain HTTP health check, independent of MCP session semantics --
+    # a bare GET on /mcp itself returns 400 (streamable-http requires a
+    # session), which would make Render's health check flap forever.
+    from starlette.responses import PlainTextResponse
+
+    return PlainTextResponse("ok")
+
+
 def _json(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=1, default=str)
 

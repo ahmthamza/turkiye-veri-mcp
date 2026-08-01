@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## v0.13.0
+- **Hata düzeltmesi (hosted dağıtım):** `render.yaml`'daki sağlık kontrolü `/mcp` adresine düz GET atıyordu; MCP streamable-http protokolü oturumsuz GET'e 400 döndürdüğü için Render'ın sağlık kontrolü sürekli başarısız görünüyordu (loglarda tekrar eden 400 Bad Request). Artık MCP protokolünden bağımsız bir `/healthz` endpoint'i var, `render.yaml` oraya yönlendiriyor.
+
 ## v0.12.0
 - `turkiye-veri-probe`: 429 (Too Many Requests) alındığında üstel geri çekilmeyle 3 deneme yapıyor. Gerçek kullanım (tek tablo indirme) hiç etkilenmiyordu; bu yalnızca sondanın toplu/hızlı indirme deseninde TÜİK'i hız sınırına takılmaktan kurtarıyor.
 - 173 dosyalık ikinci canlı ölçüm: **%94,6 gerçek tidy başarısı**. Kalan 8 istisna (seyrek/isimsiz tablolar) ve 1 nontabular (PDF harita görseli) kabul edilebilir kapsam dışı durumlar.

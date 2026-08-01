@@ -4,7 +4,7 @@ services:
     name: turkiye-veri-mcp
     runtime: docker
     plan: free
-    healthCheckPath: /mcp
+    healthCheckPath: /healthz
     envVars:
       - key: MCP_TRANSPORT
         value: http
