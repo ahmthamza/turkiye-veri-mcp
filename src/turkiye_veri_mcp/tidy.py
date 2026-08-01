@@ -115,6 +115,45 @@ def _dedupe_columns(names: list[str]) -> list[str]:
     return result
 
 
+def _extract_sections(body: pd.DataFrame) -> tuple[pd.DataFrame, list[str | None]]:
+    """Detect intra-sheet section-title rows and strip them out.
+
+    TUIK sometimes stacks several indicators in one sheet, each block
+    introduced by a title row (e.g. "İşgücüne katılma oranı (%)") before
+    its own years/regions rows resume. Such a title typically comes from a
+    merged Excel cell, which pandas reads with the text only in the first
+    column and NaN everywhere else in that row -- so the test is "only
+    column 0 is filled", not just "few cells filled" (a row that repeats
+    the same text across several duplicate label columns, e.g. a
+    "Yıllar - Years" axis marker, must NOT match). Returns the body with
+    marker rows removed, plus a list (aligned with kept rows) naming each
+    row's section -- all None if no markers were found.
+    """
+    labels: list[str | None] = []
+    keep_mask: list[bool] = []
+    current: str | None = None
+    any_section = False
+    for _, row in body.iterrows():
+        values = row.tolist()
+        first, rest = values[0], values[1:]
+        if (
+            not _is_blank(first)
+            and isinstance(first, str)
+            and not looks_like_period(first)
+            and all(_is_blank(v) for v in rest)
+        ):
+            current = first.strip()
+            any_section = True
+            keep_mask.append(False)
+            continue
+        keep_mask.append(True)
+        labels.append(current)
+    if not any_section:
+        return body, [None] * len(body)
+    kept = body[keep_mask].copy()
+    return kept, labels
+
+
 def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     """Tidy one sheet. Returns (long DataFrame, confidence note)."""
     frame = raw.dropna(axis=0, how="all").dropna(axis=1, how="all")
@@ -128,6 +167,11 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     if body.empty:
         raise TidyError("no data rows below the header")
 
+    body, section_labels = _extract_sections(body)
+    if body.empty:
+        raise TidyError("sheet is only section titles, no data rows")
+    has_sections = any(label is not None for label in section_labels)
+
     columns: list[str] = []
     for position, value in enumerate(header):
         if _is_blank(value):
@@ -138,6 +182,8 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
             columns.append(str(value).strip())
     columns = _dedupe_columns(columns)
     body.columns = columns
+    if has_sections:
+        body["_bolum"] = section_labels
 
     def _col(name: str) -> pd.Series:
         # body[name] is a DataFrame, not a Series, if `columns` still has a
@@ -148,17 +194,23 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
 
     period_columns = [c for c in columns if looks_like_period(c)]
     label_columns = [c for c in columns if c not in period_columns]
+    section_id = ["_bolum"] if has_sections else []
 
     if period_columns and label_columns:
         long = body.melt(
-            id_vars=label_columns,
+            id_vars=label_columns + section_id,
             value_vars=period_columns,
             var_name="donem",
             value_name="deger",
         )
         note = f"crosstab unpivot ({len(label_columns)} etiket, {len(period_columns)} dönem)"
     elif period_columns:
-        long = body.melt(value_vars=period_columns, var_name="donem", value_name="deger")
+        long = body.melt(
+            id_vars=section_id or None,
+            value_vars=period_columns,
+            var_name="donem",
+            value_name="deger",
+        )
         note = "yalnızca dönem sütunları"
     else:
         # A period column instead of period headers (long already).
@@ -177,7 +229,7 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
                 raise TidyError("period column found but no numeric value columns")
             id_columns = [c for c in columns if c not in value_columns and c != period_column]
             long = body.melt(
-                id_vars=id_columns + [period_column],
+                id_vars=id_columns + section_id + [period_column],
                 value_vars=value_columns,
                 var_name="gosterge",
                 value_name="deger",
@@ -197,12 +249,37 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
                 )
             id_columns = [c for c in columns if c not in value_columns]
             long = body.melt(
-                id_vars=id_columns,
+                id_vars=id_columns + section_id,
                 value_vars=value_columns,
                 var_name="gosterge",
                 value_name="deger",
             )
             note = "dönem bilgisi yok (tek dönemlik/snapshot tablo)"
+
+    if has_sections:
+        bolum = long["_bolum"]
+        bolum_present = bolum.notna()
+        if "gosterge" in long.columns:
+            existing = long["gosterge"]
+            placeholder = existing.astype(str).str.match(r"^kolon_\d+$")
+            combined = bolum.astype(str) + " — " + existing.astype(str)
+            new_gosterge = existing.copy()
+            # bölüm bilgisi var + eski değer placeholder/boş -> sadece bölüm adı
+            new_gosterge = new_gosterge.mask(
+                bolum_present & (placeholder | existing.isna()), bolum
+            )
+            # bölüm bilgisi var + eski değer gerçek metin -> ikisini birleştir
+            new_gosterge = new_gosterge.mask(
+                bolum_present & ~placeholder & ~existing.isna(), combined
+            )
+            # bölüm bilgisi yok (ilk başlıktan önceki satırlar) -> eski değeri
+            # olduğu gibi bırak (gerçek sütun adı ya da placeholder)
+            long["gosterge"] = new_gosterge
+        else:
+            long["gosterge"] = bolum.where(bolum_present, "(bölüm belirtilmemiş)")
+        long = long.drop(columns=["_bolum"])
+        n_sections = len({l for l in section_labels if l is not None})
+        note += f"; {n_sections} gösterge bloğu tespit edildi"
 
     long["deger"] = pd.to_numeric(
         long["deger"].map(_clean_number), errors="coerce"

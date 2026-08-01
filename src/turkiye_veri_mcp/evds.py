@@ -290,12 +290,19 @@ class EvdsClient:
 
         merged = per_batch[0]
         for frame in per_batch[1:]:
-            join_on = [c for c in ("Tarih", "YEARWEEK") if c in merged.columns and c in frame.columns]
-            merged = merged.merge(frame, on=join_on, how="outer") if join_on else pd.concat(
-                [merged, frame], axis=1
-            )
-        if "Tarih" in merged.columns:
-            merged = merged.drop_duplicates(subset=["Tarih"]).reset_index(drop=True)
+            # EVDS always returns the date/period column first, but its
+            # name varies by frequency (e.g. "Tarih"). Using the actual
+            # first column name -- rather than a hardcoded guess -- avoids
+            # silently falling back to a row-position concat, which would
+            # misalign values whenever two batches have different numbers
+            # of observations (e.g. one series starts later than another).
+            key = merged.columns[0]
+            if key in frame.columns:
+                merged = merged.merge(frame, on=key, how="outer")
+            else:
+                merged = pd.concat([merged, frame], axis=1)
+        date_col = merged.columns[0]
+        merged = merged.drop_duplicates(subset=[date_col]).reset_index(drop=True)
         return merged
 
     def get_datagroup_data(

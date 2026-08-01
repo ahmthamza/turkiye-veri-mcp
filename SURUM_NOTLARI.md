@@ -1,5 +1,18 @@
 # Sürüm notları
 
+## v0.15.0
+Sen istemeden, kodu tarayıp bulduğum iki ek hata:
+
+- **tidy.py — başlıksız ilk gösterge bloğu:** Bir sayfada birden fazla gösterge varsa ama İLK göstergenin başlık satırı yoksa (yalnızca sonraki göstergeler birleştirilmiş hücre başlığıyla ayrılmışsa), o ilk bloğun satırları gösterge adı yerine gerçek `NaN` alıyordu. Artık başlığı olmayan bloklar orijinal sütun adını koruyor, veri kaybı yok.
+- **evds.py — çoklu seri/uzun dönem birleştirmesinde sabit sütun adı varsayımı:** `evds_get_data`/`evds_download_data` çok seri veya uzun tarih aralığını otomatik parçalarken, parçaları tarihe göre birleştirmek için sütun adının `"Tarih"` veya `"YEARWEEK"` olduğunu varsayıyordu. Farklı bir isim gelirse (doğrulanmamış bir varsayımdı) sessizce yan yana yapıştırmaya düşüp, farklı tarih aralıklı serilerde **yanlış tarihe yanlış değer eşleştirebilirdi**. Artık sütun adı sabit değil, her seferinde dinamik tespit ediliyor; farklı uzunluktaki seriler doğru şekilde eksik (NaN) bırakılıyor, yanlış hizalanmıyor.
+
+Sekiz regresyon testi (tidy.py) ve iki hedefli test (evds.py) ile doğrulandı.
+
+## v0.14.0
+- **Yeni özellik: çok göstergeli blok tespiti.** TÜİK'in bazı Excel dosyaları (ör. "Temel işgücü göstergeleri") tek sayfada birden fazla göstergeyi (işgücü sayısı, işsizlik oranı, istihdam oranı vb.) art arda bloklar halinde yayınlıyor; her blok birleştirilmiş bir hücreden gelen tek satırlık başlıkla ayrılıyor. `tuik_get_table_data` artık bu başlıkları tanıyıp `gosterge` sütununa doğru gösterge adını yazıyor — önceden bu sayılar tek bir isimsiz sütuna (`kolon_2`) düşüp gösterge kimliği kayboluyordu.
+- Tespit kriteri sıkı tutuldu: yalnızca ilk sütunu dolu, geri kalanı tamamen boş olan satırlar "bölüm başlığı" sayılıyor (Excel'deki birleştirilmiş hücrelerin okunma şekli). Metni tüm sütunlara tekrarlayan artefakt satırlar (ör. "Yıllar - Years") yanlışlıkla bölüm sanılmıyor.
+- Bölümsüz sıradan tablolarda davranış tamamen değişmedi (7 regresyon testi doğrulandı).
+
 ## v0.13.0
 - **Hata düzeltmesi (hosted dağıtım):** `render.yaml`'daki sağlık kontrolü `/mcp` adresine düz GET atıyordu; MCP streamable-http protokolü oturumsuz GET'e 400 döndürdüğü için Render'ın sağlık kontrolü sürekli başarısız görünüyordu (loglarda tekrar eden 400 Bad Request). Artık MCP protokolünden bağımsız bir `/healthz` endpoint'i var, `render.yaml` oraya yönlendiriyor.
 
