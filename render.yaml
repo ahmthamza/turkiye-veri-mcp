@@ -1,0 +1,12 @@
+# Render.com tek tıkla dağıtım (ücretsiz katman yeterli)
+services:
+  - type: web
+    name: turkiye-veri-mcp
+    runtime: docker
+    plan: free
+    healthCheckPath: /mcp
+    envVars:
+      - key: MCP_TRANSPORT
+        value: http
+      - key: EVDS_API_KEY
+        sync: false   # Render panelinden gizli değer olarak girilir
