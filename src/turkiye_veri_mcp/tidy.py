@@ -154,14 +154,26 @@ def _extract_sections(body: pd.DataFrame) -> tuple[pd.DataFrame, list[str | None
     return kept, labels
 
 
-def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
-    """Tidy one sheet. Returns (long DataFrame, confidence note)."""
+def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str, dict[str, Any]]:
+    """Tidy one sheet. Returns (long DataFrame, confidence note, debug info)."""
     frame = raw.dropna(axis=0, how="all").dropna(axis=1, how="all")
     if frame.empty:
         raise TidyError("sheet is empty")
 
     header_index = find_header_row(frame)
     header = frame.iloc[header_index].tolist()
+    debug = {
+        "header_index": header_index,
+        "header_raw": [None if v != v else v for v in header],
+        "rows_above_header": [
+            [None if c != c else c for c in frame.iloc[i].tolist()]
+            for i in range(max(0, header_index - 2), header_index)
+        ],
+        "rows_below_header": [
+            [None if c != c else c for c in frame.iloc[i].tolist()]
+            for i in range(header_index + 1, min(len(frame), header_index + 4))
+        ],
+    }
     body = frame.iloc[header_index + 1 :].copy()
     body = body[~body.apply(_is_footnote_row, axis=1)]
     if body.empty:
@@ -287,7 +299,7 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     long = long[long["deger"].notna()].reset_index(drop=True)
     if long.empty:
         raise TidyError("no numeric observations after cleaning")
-    return long, note
+    return long, note, debug
 
 
 def _clean_number(value: Any) -> Any:
@@ -321,9 +333,10 @@ def tidy_istab(content: bytes) -> tuple[pd.DataFrame, dict[str, Any]]:
     frames: list[pd.DataFrame] = []
     notes: dict[str, str] = {}
     failures: dict[str, str] = {}
+    debug_by_sheet: dict[str, Any] = {}
     for name, sheet in book.items():
         try:
-            long, note = tidy_sheet(sheet)
+            long, note, debug = tidy_sheet(sheet)
         except TidyError as exc:
             failures[name] = str(exc)
             continue
@@ -331,6 +344,7 @@ def tidy_istab(content: bytes) -> tuple[pd.DataFrame, dict[str, Any]]:
             long.insert(0, "sayfa", name)
         frames.append(long)
         notes[name] = note
+        debug_by_sheet[name] = debug
 
     if not frames:
         raise TidyError(
@@ -345,5 +359,6 @@ def tidy_istab(content: bytes) -> tuple[pd.DataFrame, dict[str, Any]]:
         "sheet_notes": notes,
         "sheet_failures": failures,
         "tidy_confidence": "yüksek" if not failures and len(frames) == len(book) else "kısmi",
+        "debug_header": debug_by_sheet,
     }
     return merged, report

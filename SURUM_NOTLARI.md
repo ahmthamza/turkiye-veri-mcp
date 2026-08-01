@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## v0.16.0 (teşhis)
+- İşgücü tablosunda gösterge blok tespiti canlıda tetiklenmedi — meğer bu dosya satır-bloklu değil, sütun-yığmalı yapıdaymış (birden fazla isimsiz gösterge sütunu yan yana). `tuik_get_table_data` çıktısına geçici bir `debug_header` alanı eklendi: tespit edilen başlık satırı, üstündeki/altındaki ham satırlar. Bu, gerçek yapıyı görüp doğru düzeltmeyi (çok satırlı/birleştirilmiş başlık birleştirme) yapmak için.
+
 ## v0.15.0
 Sen istemeden, kodu tarayıp bulduğum iki ek hata:
 

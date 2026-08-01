@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "turkiye-veri-mcp"
-version = "0.15.0"
+version = "0.16.0"
 description = "MCP server for Turkish official data: TUIK statistics (SDMX) and TCMB EVDS series in one place"
 readme = "README.md"
 license = { text = "MIT" }
