@@ -72,31 +72,70 @@ def _numeric_value(value: Any) -> float | None:
         return None
 
 
-def find_header_row(frame: pd.DataFrame, scan: int = 12) -> int:
-    """Index of the row that most looks like a header.
+def find_header_block(frame: pd.DataFrame, scan: int = 15) -> tuple[int, int]:
+    """Index range (start, end) of the rows that make up the header block.
 
-    A header row carries labels and/or period markers but no free-standing
-    observations, so any row holding a non-period number is treated as data.
+    TUIK tables often use 2 or 3 rows for headers (e.g. Unit -> Indicator -> Gender).
+    This function finds where the data actually starts, and assumes everything 
+    above it forms a multi-row header block.
     """
-    best_index, best_score = None, -1.0
+    data_start = -1
     for index in range(min(scan, len(frame))):
         row = frame.iloc[index]
         values = [v for v in row.tolist() if not _is_blank(v)]
-        if len(values) < 2:
-            continue
-        periods = sum(1 for v in values if looks_like_period(v))
+        
+        # A row is data if it contains multiple numeric observations (not years)
         observations = sum(
             1
             for v in values
             if not looks_like_period(v) and _numeric_value(v) is not None
         )
-        if observations:
-            continue  # data row, not a header
-        labels = len(values) - periods
-        score = periods * 2 + labels + len(values) / max(len(row), 1)
-        if score > best_score:
-            best_index, best_score = index, score
-    return best_index if best_index is not None else 0
+        if observations > 1:
+            data_start = index
+            break
+            
+    if data_start <= 0:
+        return 0, 0  # Fallback if no clear data row is found
+
+    # Header block is everything from top to data_start - 1
+    # Let's ignore completely empty rows at the very top
+    start_idx = 0
+    while start_idx < data_start and frame.iloc[start_idx].isna().all():
+        start_idx += 1
+        
+    return start_idx, data_start - 1
+
+
+def _combine_header_rows(frame: pd.DataFrame, start_idx: int, end_idx: int) -> list[str]:
+    """Merge a multi-row header block into a single flat string per column.
+    
+    Handles Excel merged cells by forward-filling horizontally (for repeating labels
+    across columns) and vertically (for multi-level categories).
+    """
+    block = frame.iloc[start_idx : end_idx + 1].copy()
+    
+    # Fill horizontally (axis=1) for merged header cells across columns
+    block = block.ffill(axis=1)
+    
+    combined_headers = []
+    for col in block.columns:
+        parts = []
+        for val in block[col]:
+            if not _is_blank(val):
+                # Format years cleanly (e.g., 2020.0 -> "2020")
+                if isinstance(val, float) and val.is_integer():
+                    val = str(int(val))
+                else:
+                    val = str(val).strip()
+                
+                # Avoid appending duplicate labels like "Toplam — Toplam"
+                if not parts or val != parts[-1]:
+                    parts.append(val)
+        
+        # Join the parts with an em-dash, or fallback to an empty string
+        combined_headers.append(" — ".join(parts) if parts else "")
+        
+    return combined_headers
 
 
 def _dedupe_columns(names: list[str]) -> list[str]:
@@ -160,24 +199,28 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str, dict[str, Any]]:
     if frame.empty:
         raise TidyError("sheet is empty")
 
-    header_index = find_header_row(frame)
-    header = frame.iloc[header_index].tolist()
+    header_start, header_end = find_header_block(frame)
+    header = _combine_header_rows(frame, header_start, header_end)
+    
     debug = {
-        "header_index": header_index,
-        "header_raw": [None if v != v else v for v in header],
+        "header_start": header_start,
+        "header_end": header_end,
+        "header_combined": header,
         "rows_above_header": [
             [None if c != c else c for c in frame.iloc[i].tolist()]
-            for i in range(max(0, header_index - 2), header_index)
+            for i in range(max(0, header_start - 2), header_start)
         ],
         "rows_below_header": [
             [None if c != c else c for c in frame.iloc[i].tolist()]
-            for i in range(header_index + 1, min(len(frame), header_index + 4))
+            for i in range(header_end + 1, min(len(frame), header_end + 4))
         ],
     }
-    body = frame.iloc[header_index + 1 :].copy()
+    
+    # Body (data) starts right after the header block
+    body = frame.iloc[header_end + 1 :].copy()
     body = body[~body.apply(_is_footnote_row, axis=1)]
     if body.empty:
-        raise TidyError("no data rows below the header")
+        raise TidyError("no data rows below the header block")
 
     body, section_labels = _extract_sections(body)
     if body.empty:
