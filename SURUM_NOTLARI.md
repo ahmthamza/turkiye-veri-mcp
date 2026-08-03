@@ -1,5 +1,9 @@
 # Sürüm notları
 
+## v0.18.0 (denenmemiş — canlı test gerekiyor)
+- **sdmx.py — 401 için ikinci deneme: oturum çerezi.** `tuikr` R paketinin kaynağı incelendiğinde, SDMX çağrısından önce hep portal (katalog) çağrısı yapıldığı ve R'nin HTTP istemcisinin çerezleri oturum boyunca taşıdığı görüldü. Bu, nsiws.tuik.gov.tr'nin de veriportali ile aynı oturum çerezini beklediği ihtimalini düşündürüyor. `sdmx.py` artık SDMX isteğinden önce `portal.py`'nin katalog sayfasını ziyaret edip aynı `httpx.Client` (ve çerezlerini) SDMX isteğinde de kullanıyor.
+- **Doğrulanmadı:** Bu teori sandbox'ta test edilemedi (TÜİK'e ağ erişimi yok). Deploy sonrası `tuik_describe_dataflow` ile gerçek sonucu görmemiz gerekiyor — 401 hâlâ dönerse, sorun muhtemelen header/çerez dışı bir şey (IP kısıtlaması, dokümante edilmemiş anahtar gereksinimi vb.).
+
 ## v0.17.0
 - **sdmx.py — eksik User-Agent düzeltmesi tamamlandı.** GitHub'daki repoda bu düzeltmenin daha önce planlandığı ama hiç uygulanmadığı tespit edildi (nsiws.tuik.gov.tr'ye giden isteklerde hâlâ 401 dönüyordu). Artık `portal.py`'deki tarayıcı User-Agent'ı SDMX isteklerine de ekleniyor.
 - **tidy.py — çok satırlı başlık birleştirme tamamlandı.** GitHub'da başka bir oturumdan gelen kısmi bir çok-satırlı-header girişimi vardı (find_header_block/_combine_header_rows), ama iki gerçek hatası tespit edilip düzeltildi:

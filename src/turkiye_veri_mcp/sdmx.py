@@ -68,6 +68,25 @@ def build_structure_url(dataflow_id: str) -> str:
     )
 
 
+def _primed_client(timeout: float) -> httpx.Client:
+    """Open an httpx.Client that carries a veriportali session cookie.
+
+    Unverified hypothesis: nsiws.tuik.gov.tr may reject requests with no
+    prior veriportali session, the same way its JSON catalog API does
+    (portal.py already primes a cookie for that). A cookie-carrying client
+    costs nothing extra if this theory is wrong -- the request just goes
+    out with an unused cookie -- so it's a safe thing to always do.
+    """
+    from turkiye_veri_mcp.portal import PORTAL_BASE
+
+    client = httpx.Client(timeout=timeout, follow_redirects=True, headers=_BASE_HEADERS)
+    try:
+        client.get(f"{PORTAL_BASE}/tr/statistical-themes")
+    except httpx.HTTPError:
+        pass  # priming is best-effort; proceed with the SDMX call regardless
+    return client
+
+
 def fetch_data(
     dataflow_id: str,
     key: str = "ALL",
@@ -78,7 +97,7 @@ def fetch_data(
     """Fetch observations as a tidy DataFrame (CSV first, XML fallback)."""
     url = build_data_url(dataflow_id, key=key, start=start, end=end)
 
-    with httpx.Client(timeout=timeout, follow_redirects=True, headers=_BASE_HEADERS) as client:
+    with _primed_client(timeout) as client:
         response = client.get(url, headers={"Accept": _CSV_ACCEPT})
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
@@ -104,7 +123,7 @@ def fetch_data(
 def fetch_structure(dataflow_id: str, lang: str = "tr", timeout: float = 120.0) -> dict[str, Any]:
     """Fetch dimensions and codelists for a dataflow."""
     url = build_structure_url(dataflow_id)
-    with httpx.Client(timeout=timeout, follow_redirects=True, headers=_BASE_HEADERS) as client:
+    with _primed_client(timeout) as client:
         response = client.get(url, headers={"Accept": _XML_STRUCTURE_ACCEPT})
     if response.status_code != 200:
         raise SdmxError(
