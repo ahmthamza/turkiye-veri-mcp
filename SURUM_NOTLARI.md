@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## v0.18.1 (hata düzeltmesi)
+- v0.18.0'daki oturum-çerezi denemesi canlıda "Cannot open a client instance more than once" hatasıyla çöküyordu — `_primed_client` içinde çerez almak için client zaten kullanılmışken `fetch_data`/`fetch_structure` onu tekrar `with` ile açmaya çalışıyordu. `with` yerine `try/finally` + `client.close()` kullanılarak düzeltildi. Bu bir kod hatasıydı, 401 teorisiyle ilgisi yok — asıl teori (oturum çerezi) hâlâ test edilmeyi bekliyor.
+
 ## v0.18.0 (denenmemiş — canlı test gerekiyor)
 - **sdmx.py — 401 için ikinci deneme: oturum çerezi.** `tuikr` R paketinin kaynağı incelendiğinde, SDMX çağrısından önce hep portal (katalog) çağrısı yapıldığı ve R'nin HTTP istemcisinin çerezleri oturum boyunca taşıdığı görüldü. Bu, nsiws.tuik.gov.tr'nin de veriportali ile aynı oturum çerezini beklediği ihtimalini düşündürüyor. `sdmx.py` artık SDMX isteğinden önce `portal.py`'nin katalog sayfasını ziyaret edip aynı `httpx.Client` (ve çerezlerini) SDMX isteğinde de kullanıyor.
 - **Doğrulanmadı:** Bu teori sandbox'ta test edilemedi (TÜİK'e ağ erişimi yok). Deploy sonrası `tuik_describe_dataflow` ile gerçek sonucu görmemiz gerekiyor — 401 hâlâ dönerse, sorun muhtemelen header/çerez dışı bir şey (IP kısıtlaması, dokümante edilmemiş anahtar gereksinimi vb.).

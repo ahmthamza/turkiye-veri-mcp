@@ -97,7 +97,8 @@ def fetch_data(
     """Fetch observations as a tidy DataFrame (CSV first, XML fallback)."""
     url = build_data_url(dataflow_id, key=key, start=start, end=end)
 
-    with _primed_client(timeout) as client:
+    client = _primed_client(timeout)
+    try:
         response = client.get(url, headers={"Accept": _CSV_ACCEPT})
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
@@ -118,13 +119,18 @@ def fetch_data(
                 f"TUIK SDMX service returned HTTP {response.status_code} for {url}"
             )
         return _parse_generic_data(response.content)
+    finally:
+        client.close()
 
 
 def fetch_structure(dataflow_id: str, lang: str = "tr", timeout: float = 120.0) -> dict[str, Any]:
     """Fetch dimensions and codelists for a dataflow."""
     url = build_structure_url(dataflow_id)
-    with _primed_client(timeout) as client:
+    client = _primed_client(timeout)
+    try:
         response = client.get(url, headers={"Accept": _XML_STRUCTURE_ACCEPT})
+    finally:
+        client.close()
     if response.status_code != 200:
         raise SdmxError(
             f"TUIK SDMX service returned HTTP {response.status_code} for {url}"
