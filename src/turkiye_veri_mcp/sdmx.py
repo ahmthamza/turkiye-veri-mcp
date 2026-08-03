@@ -19,11 +19,14 @@ from typing import Any
 import httpx
 import pandas as pd
 
+from turkiye_veri_mcp.portal import _UA
+
 NSIWS_BASE = "https://nsiws.tuik.gov.tr/rest"
 
 _CSV_ACCEPT = "application/vnd.sdmx.data+csv; version=1.0.0; labels=both"
 _XML_DATA_ACCEPT = "application/vnd.sdmx.genericdata+xml; version=2.1"
 _XML_STRUCTURE_ACCEPT = "application/vnd.sdmx.structure+xml; version=2.1"
+_BASE_HEADERS = {"User-Agent": _UA, "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8"}
 
 
 class SdmxError(RuntimeError):
@@ -75,7 +78,7 @@ def fetch_data(
     """Fetch observations as a tidy DataFrame (CSV first, XML fallback)."""
     url = build_data_url(dataflow_id, key=key, start=start, end=end)
 
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=True, headers=_BASE_HEADERS) as client:
         response = client.get(url, headers={"Accept": _CSV_ACCEPT})
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
@@ -101,7 +104,7 @@ def fetch_data(
 def fetch_structure(dataflow_id: str, lang: str = "tr", timeout: float = 120.0) -> dict[str, Any]:
     """Fetch dimensions and codelists for a dataflow."""
     url = build_structure_url(dataflow_id)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=True, headers=_BASE_HEADERS) as client:
         response = client.get(url, headers={"Accept": _XML_STRUCTURE_ACCEPT})
     if response.status_code != 200:
         raise SdmxError(

@@ -99,10 +99,19 @@ def find_header_block(frame: pd.DataFrame, scan: int = 15) -> tuple[int, int]:
 
     # Header block is everything from top to data_start - 1
     # Let's ignore completely empty rows at the very top
+    # Skip leading fully-blank rows AND single-cell decorative titles (a
+    # row spanning the whole sheet with just one filled cell, e.g. a report
+    # title) -- but stop skipping as soon as a row has >=2 filled cells,
+    # since that is a real structural header row (even a sparse one, like
+    # a Toplam/Erkek/Kadın group-label row with one label per block).
+    # Folding a decorative title into the header would corrupt period
+    # detection downstream (a "2020" column becomes "Title — 2020").
     start_idx = 0
-    while start_idx < data_start and frame.iloc[start_idx].isna().all():
+    while start_idx < data_start - 1:
+        non_blank = [v for v in frame.iloc[start_idx].tolist() if not _is_blank(v)]
+        if len(non_blank) >= 2:
+            break
         start_idx += 1
-        
     return start_idx, data_start - 1
 
 
@@ -355,6 +364,13 @@ def _clean_number(value: Any) -> Any:
     if text in ("-", "–", "—", "..", ".", ":", "*"):
         return None
     text = re.sub(r"\([^)]*\)", "", text)          # footnote markers
+    text = text.strip()
+    # A genuine number never contains a letter -- reject free-text labels
+    # (e.g. "15 ve daha yukarı yaştaki nüfus... Population 15 years...")
+    # BEFORE stripping non-digit characters, or the stray digits embedded
+    # in the sentence would concatenate into a fake number (e.g. "1515").
+    if any(ch.isalpha() for ch in text):
+        return None
     text = text.replace("\xa0", "").replace(" ", "")
     if "," in text and "." in text:                # 1.234,5 -> 1234.5
         text = text.replace(".", "").replace(",", ".")

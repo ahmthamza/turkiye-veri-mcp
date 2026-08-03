@@ -44,7 +44,7 @@ Türkiye'nin iki temel resmi veri kaynağını tek [MCP (Model Context Protocol)
 ### Claude Code
 
 ```bash
-claude mcp add -e EVDS_API_KEY=ANAHTARINIZ turkiye-veri -- uvx --from git+[https://github.com/ahmthamza/turkiye-veri-mcp](https://github.com/ahmthamza/turkiye-veri-mcp) turkiye-veri-mcp
+claude mcp add -e EVDS_API_KEY=ANAHTARINIZ turkiye-veri -- uvx --from git+https://github.com/ahmthamza/turkiye-veri-mcp turkiye-veri-mcp
 ```
 
 ### Claude Desktop
@@ -56,27 +56,26 @@ claude mcp add -e EVDS_API_KEY=ANAHTARINIZ turkiye-veri -- uvx --from git+[https
   "mcpServers": {
     "turkiye-veri": {
       "command": "uvx",
-      "args": ["--from", "git+[https://github.com/ahmthamza/turkiye-veri-mcp](https://github.com/ahmthamza/turkiye-veri-mcp)", "turkiye-veri-mcp"],
+      "args": ["--from", "git+https://github.com/ahmthamza/turkiye-veri-mcp", "turkiye-veri-mcp"],
       "env": { "EVDS_API_KEY": "ANAHTARINIZ" }
     }
   }
 }
 ```
 
-### Claude web (claude.ai) — Hosted Kurulum (Herkes İçin)
+### Claude web (claude.ai) — hosted kurulum
 
-Claude Web (claude.ai), bilgisayarınızdaki yerel sunuculara doğrudan bağlanamaz; internete açık bir sunucu adresine (URL) ihtiyaç duyar. Bu projeyi kendi adınıza, ücretsiz ve güvenli bir şekilde saniyeler içinde buluta kurmak için aşağıdaki butona tıklayabilirsiniz:
+claude.ai yalnızca **remote** custom connector kabul eder: bağlantı Anthropic'in sunucularından kurulur, senin makinenden değil. Yani sunucunun internete açık bir adreste çalışıyor olması gerekir.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ahmthamza/turkiye-veri-mcp)
+Sunucu HTTP transport'unu destekliyor:
 
-**Nasıl Kurulur?**
-1. Yukarıdaki butona tıklayın (ücretsiz bir Render hesabı açmanız gerekebilir).
-2. Kurulum ekranında sistem size güvenliğiniz için **`EVDS_API_KEY`** değerinizi soracaktır. Buraya [evds3.tcmb.gov.tr](https://evds3.tcmb.gov.tr) adresinden aldığınız kendi ücretsiz Merkez Bankası API anahtarınızı girin ve "Apply" diyerek kurulumu başlatın.
-3. Birkaç dakika içinde kurulum bitecek ve Render size özel bir web adresi verecektir (örn: `https://turkiye-veri-abc.onrender.com`).
-4. Bu adresin sonuna `/mcp` ekleyerek (örn: `https://turkiye-veri-abc.onrender.com/mcp`) kopyalayın.
-5. **claude.ai** sayfasına gidin, sağ üstten **Settings → Connectors → Add custom connector** menüsüne tıklayın ve kopyaladığınız adresi yapıştırın.
+```bash
+turkiye-veri-mcp --transport http --port 8000      # http://<adres>/mcp
+```
 
-*Not: Bu yöntem sayesinde herkes sunucuyu kendi API anahtarı ve kotasıyla çalıştırır. Anahtarınız kodun içinde yer almaz, tamamen şifrelenmiş olarak sizin Render hesabınızda saklanır.*
+Depoda hazır `Dockerfile` ve `render.yaml` var. Render/Railway/Fly gibi bir platforma dağıttıktan sonra claude.ai'de **Settings → Connectors → Add custom connector** ile `https://<adresiniz>/mcp` adresini ekleyin.
+
+**Anahtar uyarısı:** Hosted sunucuda `EVDS_API_KEY` ortam değişkeni sunucunun sahibine aittir; sunucuyu herkese açarsanız EVDS çağrıları sizin anahtarınızla ve sizin kotanızdan gider. Kendi kullanımınız için özel tutun ya da erişimi kısıtlayın. TÜİK araçları anahtar gerektirmediğinden bu sorun yalnızca EVDS tarafını ilgilendirir.
 
 ## Örnek kullanım
 
