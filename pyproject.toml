@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "turkiye-veri-mcp"
-version = "0.18.1"
+version = "0.19.0"
 description = "MCP server for Turkish official data: TUIK statistics (SDMX) and TCMB EVDS series in one place"
 readme = "README.md"
 license = { text = "MIT" }
@@ -17,6 +17,7 @@ dependencies = [
     "pandas>=2.0",
     "openpyxl>=3.1",
     "xlrd>=2.0",
+    "pyjstat>=2.4",
 ]
 
 [project.urls]

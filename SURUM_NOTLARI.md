@@ -1,5 +1,14 @@
 # Sürüm notları
 
+## v0.19.0 — SDMX 401 kalıcı olarak çözüldü
+- **Kök neden bulundu:** `nsiws.tuik.gov.tr` (eski SDMX 2.1 servisi) TÜİK tarafından kullanımdan kaldırılmış/kısıtlanmış görünüyor — kullanıcı, tarayıcının Network sekmesinde TÜİK'in kendi yeni web arayüzünün (`databrowser2.tuik.gov.tr`) farklı bir API kullandığını yakaladı.
+- **sdmx.py tamamen bu yeni API'ye taşındı:** `GET .../structure` (varsayılan seçim + boyutlar) ve `POST .../data` (JSON-stat 2.0 formatında veri) ile çalışıyor. Yanıt `pyjstat` ile parse ediliyor (seyrek/eksik hücreleri doğru işliyor).
+- Gerçek yakalanan TÜİK verisiyle doğrulandı: İstanbul 2007 nüfusu (12.573.836) doğru geldi, boyutlar (REF_AREA, FREQ, INDICATOR, İKAMET_YERİ, ADNKS_GÖSTERGE, TIME_PERIOD) doğru ayrıştı.
+- Eski `nsiws` yolu kod içinde fallback olarak korunuyor (yeni API başarısız olursa denenir) — TÜİK eski servisi geri açarsa otomatik devreye girer, dar SDMX key (ör. "TR.TR100") desteği de o zaman geri gelir.
+- **Bilinen sınır:** Yeni API'de şimdilik yalnızca `key="ALL"` (tam varsayılan seçim) destekleniyor; daraltılmış key istekleri legacy'ye düşüyor (o da şu an kapalı olduğu için başarısız olur). Sonucu kendiniz filtrelemeniz gerekebilir.
+- Yeni bağımlılık: `pyjstat`.
+
+
 ## v0.18.1 (hata düzeltmesi)
 - v0.18.0'daki oturum-çerezi denemesi canlıda "Cannot open a client instance more than once" hatasıyla çöküyordu — `_primed_client` içinde çerez almak için client zaten kullanılmışken `fetch_data`/`fetch_structure` onu tekrar `with` ile açmaya çalışıyordu. `with` yerine `try/finally` + `client.close()` kullanılarak düzeltildi. Bu bir kod hatasıydı, 401 teorisiyle ilgisi yok — asıl teori (oturum çerezi) hâlâ test edilmeyi bekliyor.
 
