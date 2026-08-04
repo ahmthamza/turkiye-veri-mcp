@@ -39,27 +39,67 @@ Türkiye'nin iki temel resmi veri kaynağını tek [MCP (Model Context Protocol)
 
 ## Kurulum
 
-Ön koşullar: [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`) ve EVDS araçları için [evds3.tcmb.gov.tr](https://evds3.tcmb.gov.tr)'den ücretsiz API anahtarı (Benim Sayfam → Kayıt → Profilim → API Key). Anahtar girmezseniz TÜİK araçları yine çalışır; EVDS araçları anahtar isteyen açıklayıcı bir mesaj döner.
+İki yol var: **hosted sunucuya bağlanmak** (kurulum yok, aşağıdaki ilk bölüm) ya da **kendi bilgisayarınızda çalıştırmak** (bunun için [uv](https://docs.astral.sh/uv/getting-started/installation/) gerekir — `curl -LsSf https://astral.sh/uv/install.sh | sh`). Her iki yolda da EVDS araçları için [evds3.tcmb.gov.tr](https://evds3.tcmb.gov.tr)'den ücretsiz API anahtarı gerekir (Benim Sayfam → Kayıt → Profilim → API Key); TÜİK araçları anahtar gerektirmez.
 
-### Claude Code
+### En kolay yol — hazır hosted sunucuya bağlanmak
 
-**En kolay yol — hazır hosted sunucuya bağlanmak** (kurulum yok, Windows'ta da sorunsuz çalışır):
+Kurulum gerektirmez, hiçbir platformda `uvx`/Python derdi yok. Sunucu zaten `https://turkiye-veri-mcp.onrender.com/mcp` adresinde çalışıyor. TÜİK araçları herkes için anahtarsız çalışır. EVDS araçları için üç platformun **desteği farklı** — aşağıda platform platform, hangisinin kendi anahtarınızı kullanmanıza izin verdiği net yazıyor.
 
+#### Claude Code (Mac ve Windows) — kendi EVDS anahtarınızla
+
+```bash
+claude mcp add-json turkiye-veri '{"type":"http","url":"https://turkiye-veri-mcp.onrender.com/mcp","headers":{"X-Evds-Api-Key":"ANAHTARINIZ"}}'
+```
+
+Bu komut **hem Mac'te hem Windows'ta (PowerShell dahil) harfi harfine aynı şekilde çalışır** — `claude mcp add --transport http ... --header ...` biçimini kasıtlı kullanmadık, çünkü o komutta iki bilinen sorun var: Windows'ta `--` sonrası parametreleri yanlış ayrıştırma hatası ([anthropics/claude-code#15077](https://github.com/anthropics/claude-code/issues/15077)) ve header'ın bazen sessizce kaydedilmediği ayrı bir hata ([anthropics/claude-code#17069](https://github.com/anthropics/claude-code/issues/17069)). `add-json` tek parça JSON aldığı için ikisini de atlıyor.
+
+Kurulumdan sonra doğrulayın:
+```bash
+claude mcp list
+```
+`turkiye-veri` karşısında `✔ Connected` görmelisiniz. Emin olamıyorsanız `~/.claude.json` (Windows'ta `%USERPROFILE%\.claude.json`) dosyasını açıp `headers` alanının gerçekten yazıldığını kontrol edin.
+
+EVDS anahtarınız yoksa header kısmını boş `{}` bırakıp sadece TÜİK araçlarını kullanabilirsiniz, ya da hiç anahtar vermeden bağlanıp EVDS araçlarında sunucu sahibinin paylaşılan kotasını kullanabilirsiniz:
 ```bash
 claude mcp add --transport http turkiye-veri https://turkiye-veri-mcp.onrender.com/mcp
 ```
 
-TÜİK araçları anahtarsız hemen çalışır. EVDS araçları da çalışır ama sunucu sahibinin EVDS anahtarını/kotasını paylaşır — kendi EVDS anahtarınızı kullanmak isterseniz aşağıdaki yerel kuruluma bakın.
+#### Claude Desktop — paylaşılan kota (kolay) ya da kendi anahtarınız (ek araç gerekir)
 
-> **Windows kullanıcıları için not:** Claude Code'un `claude mcp add ... -- komut --parametre` şeklindeki yerel (stdio) kurulum komutları PowerShell'de bilinen bir hatadan dolayı "unknown option" hatası verebiliyor ([anthropics/claude-code#15077](https://github.com/anthropics/claude-code/issues/15077)). Yukarıdaki HTTP yöntemi bu sorunu tamamen atlıyor — Windows'ta ilk denenmesi gereken yöntem bu.
+`claude_desktop_config.json` dosyası uzak (URL) sunucuları doğrudan kabul etmiyor — Desktop'ta iki yol var:
 
-**Kendi EVDS anahtarınızla yerel kurulum** (macOS/Linux'ta sorunsuz; Windows'ta yukarıdaki nottaki hata görülebilir):
+**Kolay yol (paylaşılan kota):** Uygulama içinde **Settings → Connectors → Add custom connector** ile `https://turkiye-veri-mcp.onrender.com/mcp` adresini ekleyin. EVDS araçları sunucu sahibinin anahtarını kullanır.
+
+**Kendi anahtarınızla (Node.js gerektirir):** `mcp-remote` köprüsüyle `claude_desktop_config.json`'a ekleyin:
+
+```json
+{
+  "mcpServers": {
+    "turkiye-veri": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://turkiye-veri-mcp.onrender.com/mcp", "--header", "X-Evds-Api-Key: ANAHTARINIZ"]
+    }
+  }
+}
+```
+
+#### Claude web (claude.ai) — yalnızca paylaşılan kota
+
+claude.ai'nin connector arayüzü şu anda **özel header desteklemiyor** (Anthropic'in kendi deposunda açık bir özellik talebi: [anthropics/claude-ai-mcp#10](https://github.com/anthropics/claude-ai-mcp/issues/10)). Yani web'den bağlananlar kendi EVDS anahtarını veremez, otomatik olarak sunucu sahibinin kotasını kullanır. **Settings → Connectors → Add custom connector** ile yalnızca URL'yi eklemeniz yeterli:
+
+```
+https://turkiye-veri-mcp.onrender.com/mcp
+```
+
+### Kendi bilgisayarınızda çalıştırmak (yerel kurulum)
+
+Hosted sunucuyu kullanmak istemiyorsanız — ör. tamamen kendi EVDS kotanızı izole etmek için — `uvx` ile yerel kurulum hâlâ mümkün:
 
 ```bash
 claude mcp add -e EVDS_API_KEY=ANAHTARINIZ turkiye-veri -- uvx --from git+https://github.com/ahmthamza/turkiye-veri-mcp turkiye-veri-mcp
 ```
 
-Windows'ta bu komut hata verirse, bir `.bat` sarmalayıcı dosyası oluşturup `--` içermeyen bir komutla eklemek çözer:
+Windows'ta bu komut `--` hatasına takılırsa, `.bat` sarmalayıcı çözümü:
 
 ```bat
 @echo off
@@ -67,41 +107,11 @@ set EVDS_API_KEY=ANAHTARINIZ
 uvx --from git+https://github.com/ahmthamza/turkiye-veri-mcp turkiye-veri-mcp
 ```
 
-Bu dosyayı ör. `C:\turkiye-veri-mcp\run_turkiye.bat` olarak kaydedip:
+Dosyayı ör. `C:\turkiye-veri-mcp\run_turkiye.bat` olarak kaydedip:
 
 ```powershell
 claude mcp add turkiye-veri C:\turkiye-veri-mcp\run_turkiye.bat
 ```
-
-### Claude Desktop
-
-**Settings → Developer → Edit Config** ile `claude_desktop_config.json` dosyasına:
-
-```json
-{
-  "mcpServers": {
-    "turkiye-veri": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/ahmthamza/turkiye-veri-mcp", "turkiye-veri-mcp"],
-      "env": { "EVDS_API_KEY": "ANAHTARINIZ" }
-    }
-  }
-}
-```
-
-### Claude web (claude.ai) — hosted kurulum
-
-claude.ai yalnızca **remote** custom connector kabul eder: bağlantı Anthropic'in sunucularından kurulur, senin makinenden değil. Yani sunucunun internete açık bir adreste çalışıyor olması gerekir.
-
-Sunucu HTTP transport'unu destekliyor:
-
-```bash
-turkiye-veri-mcp --transport http --port 8000      # http://<adres>/mcp
-```
-
-Depoda hazır `Dockerfile` ve `render.yaml` var. Render/Railway/Fly gibi bir platforma dağıttıktan sonra claude.ai'de **Settings → Connectors → Add custom connector** ile `https://<adresiniz>/mcp` adresini ekleyin.
-
-**Anahtar uyarısı:** Hosted sunucuda `EVDS_API_KEY` ortam değişkeni sunucunun sahibine aittir; sunucuyu herkese açarsanız EVDS çağrıları sizin anahtarınızla ve sizin kotanızdan gider. Kendi kullanımınız için özel tutun ya da erişimi kısıtlayın. TÜİK araçları anahtar gerektirmediğinden bu sorun yalnızca EVDS tarafını ilgilendirir.
 
 ## Örnek kullanım
 
@@ -126,6 +136,7 @@ MIT
 - **TÜİK istab tidy'leme best-effort'tur.** `tuik_get_table_data` TÜİK'in yaygın şablonlarını çözer ve her çıktıda `tidy_confidence` döndürür; şablona uymayan tablolarda hata verip sizi ham dosyaya yönlendirir. Ne kadarının çözüldüğünü ölçmek için `turkiye-veri-probe` kullanın.
 - **MEDAS/Biruni veritabanları listelenir, veri çekilmez.** Portal ağacındaki `database` düğümleri link olarak döner.
 - **TÜİK mikroverisi kapsam dışıdır** (kurumsal başvuruyla dağıtılır).
+- **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code'da `X-Evds-Api-Key` header'ıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) şu an custom connector'larda özel header desteklemiyor, bu yüzden web'den bağlananlar otomatik olarak sunucu sahibinin kotasını paylaşır. Bu paylaşım bir güvenlik riski değildir (EVDS zaten herkese açık veri sunar) ama yoğun/toplu sorgulardan kaçının — kota tükenirse sunucu sahibinin de erişimi kesintiye uğrar.
 - **EVDS'de sunucu tarafı seri araması yoktur.** `evds_search_series` ilk çağrıda tüm veri gruplarını gezip yerel bir indeks kurar (birkaç dakika), sonrasında anında çalışır. İndeks 7 günden eskiyse kendini yeniler; hemen yenilemek için `refresh=True` kullanın.
 
 ## Kullanım istatistikleri

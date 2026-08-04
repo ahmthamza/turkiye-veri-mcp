@@ -1,5 +1,18 @@
 # Sürüm notları
 
+## v0.20.1 (dokümantasyon — son teyit)
+Kurulumu her platformda gerçekten doğruladım (Claude Code Mac/Windows, Claude Desktop, Claude web), iki gerçek sorun buldum ve README'yi buna göre düzelttim:
+
+- **claude.ai web, custom connector'larda özel HTTP header desteklemiyor** (Anthropic'in kendi deposunda açık özellik talebi: anthropics/claude-ai-mcp#10). Web kullanıcıları kendi EVDS anahtarını veremez, otomatik paylaşılan kotayı kullanır — bu artık README'de açıkça yazıyor.
+- **`claude mcp add --transport http ... --header "..."` komutunda header'ın bazen sessizce kaydedilmediği bilinen bir Claude Code hatası var** (anthropics/claude-code#17069, hâlâ açık). Bunun yerine Claude Code kurulum talimatı artık `claude mcp add-json` kullanıyor — tek parça JSON aldığı için hem bu hatayı hem Windows'taki `--` ayrıştırma hatasını (#15077) aynı anda atlıyor, ve Mac/Windows'ta harfi harfine aynı komut çalışıyor (PowerShell'de tek tırnak da literal string).
+- Claude Desktop için ayrı iki yol belgelendi: Custom Connector (kolay, paylaşılan kota) ve `mcp-remote` köprüsü (Node.js gerektirir, kendi anahtarınızla).
+
+## v0.20.0 — hosted sunucuda kişi başına EVDS anahtarı
+- **Sorun:** MCP'yi herkese duyurunca, hosted (Render) bağlantı üzerinden gelen tüm EVDS çağrıları sunucu sahibinin tek anahtarını/kotasını paylaşıyordu — biri yoğun kullanırsa herkesin kotası tükenebilirdi.
+- **Çözüm:** EVDS araçları artık `X-Evds-Api-Key` HTTP header'ını okuyor. Header varsa o anahtarla (izole, kendi kotasıyla) istek atılıyor; header yoksa sunucunun kendi `EVDS_API_KEY` ortam değişkenine düşülüyor (stdio/yerel kullanımda zaten header kavramı yok, davranış değişmedi).
+- Gerçek HTTP isteğiyle iki yönde de doğrulandı: header'lı çağrı gönderilen anahtarla TCMB'ye gerçekten istek attı (sahte anahtar için TCMB'den gerçek ret geldi, sessiz düşme olmadı); header'sız çağrı sunucunun kendi ortam değişkenine doğru şekilde düştü.
+- README, Claude Code için `--header "X-Evds-Api-Key: ANAHTARINIZ"` eklenmiş kurulum komutunu birincil yöntem olarak gösteriyor.
+
 ## v0.19.1 (dokümantasyon)
 - **Windows kurulum kolaylığı:** Claude Code'un yerel (stdio) kurulum komutu (`claude mcp add ... -- uvx --from ...`) PowerShell'de bilinen bir hatadan dolayı "unknown option" veriyor (anthropics/claude-code#15077, #7672, #3825). README artık Claude Code için önce **hosted HTTP bağlantısını** (`claude mcp add --transport http turkiye-veri https://turkiye-veri-mcp.onrender.com/mcp`) öneriyor — kurulum gerektirmiyor, bu hataya hiç uğramıyor, Windows'ta da sorunsuz. Kendi EVDS anahtarını kullanmak isteyenler için yerel kurulum ve Windows'a özel `.bat` sarmalayıcı çözümü de belgelendi.
 

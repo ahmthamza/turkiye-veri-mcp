@@ -14,6 +14,8 @@ try:  # MCP SDK >= 2.0
 except ImportError:  # MCP SDK 1.x
     from mcp.server.fastmcp import FastMCP as MCPServer
 
+from mcp.server.mcpserver.context import Context
+
 from turkiye_veri_mcp import sdmx, usage
 from turkiye_veri_mcp.evds import EvdsClient
 from turkiye_veri_mcp.tidy import TidyError, tidy_istab
@@ -35,6 +37,25 @@ app = MCPServer(
 
 _portal = PortalClient()
 _evds = EvdsClient()
+_evds_by_key: dict[str, EvdsClient] = {}
+
+
+def _evds_client(ctx: Context | None) -> EvdsClient:
+    """Per-request EVDS client when the caller supplies their own key.
+
+    Remote HTTP callers can send their own EVDS_API_KEY via an
+    'X-Evds-Api-Key' header, so many people can share this hosted server
+    without sharing one person's TCMB quota. Falls back to the server's
+    own EVDS_API_KEY env var (stdio/local usage, or no header sent).
+    """
+    headers = getattr(ctx, "headers", None) if ctx is not None else None
+    if headers:
+        for name, value in headers.items():
+            if name.lower() == "x-evds-api-key" and value:
+                if value not in _evds_by_key:
+                    _evds_by_key[value] = EvdsClient(api_key=value)
+                return _evds_by_key[value]
+    return _evds
 
 _MAX_LIST = 60
 _MAX_CODES_SHOWN = 40
@@ -288,19 +309,19 @@ def tuik_get_table_data(url: str, output_path: str = "", max_rows: int = 50) -> 
 
 @app.tool()
 @_track
-def evds_categories(lang: str = "TR") -> str:
+def evds_categories(lang: str = "TR", ctx: Context = None) -> str:
     """List TCMB EVDS main categories (exchange rates, interest rates,
     inflation, balance of payments, surveys...).
 
     Args:
         lang: 'TR' or 'ENG'.
     """
-    return _json(_evds.categories(lang=lang))
+    return _json(_evds_client(ctx).categories(lang=lang))
 
 
 @app.tool()
 @_track
-def evds_datagroups(category_id: str = "", query: str = "", lang: str = "TR") -> str:
+def evds_datagroups(category_id: str = "", query: str = "", lang: str = "TR", ctx: Context = None) -> str:
     """List or search EVDS datagroups (thematic bundles of series).
 
     Provide category_id to list one category's datagroups, query to search
@@ -311,29 +332,30 @@ def evds_datagroups(category_id: str = "", query: str = "", lang: str = "TR") ->
         query: Substring to search in datagroup names (optional).
         lang: 'TR' or 'ENG'.
     """
+    client = _evds_client(ctx)
     if query:
-        rows = _evds.search_datagroups(query, lang=lang)
+        rows = client.search_datagroups(query, lang=lang)
     else:
-        rows = _evds.datagroups(category_id or None, lang=lang)
+        rows = client.datagroups(category_id or None, lang=lang)
     return _json(_truncated(rows))
 
 
 @app.tool()
 @_track
-def evds_series_list(datagroup_code: str, lang: str = "TR") -> str:
+def evds_series_list(datagroup_code: str, lang: str = "TR", ctx: Context = None) -> str:
     """List all series in an EVDS datagroup with codes and start dates.
 
     Args:
         datagroup_code: Datagroup code from evds_datagroups (e.g. 'bie_dkdovytl').
         lang: 'TR' or 'ENG'.
     """
-    return _json(_truncated(_evds.series_list(datagroup_code, lang=lang), 200))
+    return _json(_truncated(_evds_client(ctx).series_list(datagroup_code, lang=lang), 200))
 
 
 @app.tool()
 @_track
 def evds_search_series(
-    query: str, lang: str = "TR", limit: int = 50, refresh: bool = False
+    query: str, lang: str = "TR", limit: int = 50, refresh: bool = False, ctx: Context = None
 ) -> str:
     """Search EVDS series by name across every datagroup.
 
@@ -349,7 +371,8 @@ def evds_search_series(
             also rebuilds itself automatically once it is a week old, so newly
             published TCMB series appear without any manual step.
     """
-    hits, n_total, built_now = _evds.search_series(
+    client = _evds_client(ctx)
+    hits, n_total, built_now = client.search_series(
         query, lang=lang, limit=limit, refresh=refresh
     )
     return _json(
@@ -357,7 +380,7 @@ def evds_search_series(
             "n_hits": n_total,
             "truncated": n_total > len(hits),
             "index_built_this_call": built_now,
-            "index_age_days": _evds.index_age_days(lang),
+            "index_age_days": client.index_age_days(lang),
             "hits": hits,
         }
     )
@@ -374,6 +397,7 @@ def evds_get_datagroup_data(
     aggregation: str = "",
     formula: str = "",
     max_rows: int = 30,
+    ctx: Context = None,
 ) -> str:
     """Fetch every series in an EVDS datagroup at once (auto-chunked).
 
@@ -391,7 +415,7 @@ def evds_get_datagroup_data(
         formula: Transformation name or code 0-8.
         max_rows: Rows in the preview (default 30).
     """
-    frame, series_meta = _evds.get_datagroup_data(
+    frame, series_meta = _evds_client(ctx).get_datagroup_data(
         datagroup_code, start=start, end=end,
         frequency=frequency, aggregation=aggregation, formula=formula, lang="TR",
     )
@@ -420,6 +444,7 @@ def evds_get_data(
     aggregation: str = "",
     formula: str = "",
     max_rows: int = 50,
+    ctx: Context = None,
 ) -> str:
     """Fetch one or more EVDS series with full API features and preview in chat.
 
@@ -436,7 +461,7 @@ def evds_get_data(
             hareketli_toplam (or codes 0-8). Empty = level.
         max_rows: Rows in the preview (default 50).
     """
-    frame = _evds.get_data_chunked(
+    frame = _evds_client(ctx).get_data_chunked(
         series, start=start, end=end,
         frequency=frequency, aggregation=aggregation, formula=formula,
     )
@@ -461,6 +486,7 @@ def evds_download_data(
     frequency: str = "",
     aggregation: str = "",
     formula: str = "",
+    ctx: Context = None,
 ) -> str:
     """Fetch EVDS series and write them as a tidy CSV file (for analysis
     pipelines). Same parameters as evds_get_data.
@@ -474,7 +500,7 @@ def evds_download_data(
         aggregation: avg/min/max/first/last/sum.
         formula: Transformation name or code 0-8.
     """
-    frame = _evds.get_data_chunked(
+    frame = _evds_client(ctx).get_data_chunked(
         series, start=start, end=end,
         frequency=frequency, aggregation=aggregation, formula=formula,
     )
