@@ -59,10 +59,13 @@ claude mcp list
 ```
 `turkiye-veri` karşısında `✔ Connected` görmelisiniz. Emin olamıyorsanız `~/.claude.json` (Windows'ta `%USERPROFILE%\.claude.json`) dosyasını açıp `headers` alanının gerçekten yazıldığını kontrol edin.
 
-EVDS anahtarınız yoksa header kısmını boş `{}` bırakıp sadece TÜİK araçlarını kullanabilirsiniz, ya da hiç anahtar vermeden bağlanıp EVDS araçlarında sunucu sahibinin paylaşılan kotasını kullanabilirsiniz:
+**Sunucu sahibinin paylaşılan kotasıyla bağlanmak için** (kendi anahtarınızı hiç girmeden, ör. bir arkadaşınız zaten kendi anahtarıyla hosted sunucuyu çalıştırıyorsa):
+
 ```bash
-claude mcp add --transport http turkiye-veri https://turkiye-veri-mcp.onrender.com/mcp
+claude mcp add-json turkiye-veri '{"type":"http","url":"https://turkiye-veri-mcp.onrender.com/mcp"}'
 ```
+
+Bu, Mac'te doğrulanan `add-json` komutuyla aynı sözdizimi — sadece `headers` alanı çıkarılmış hali (o kısım ayrıca çalıştırılıp test edilmedi ama aynı kalıp olduğu için çalışması beklenir).
 
 #### Claude Desktop — paylaşılan kota (kolay) ya da kendi anahtarınız (ek araç gerekir)
 

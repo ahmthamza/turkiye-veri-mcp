@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## v0.20.2 (dokümantasyon)
+- README'deki "paylaşılan kotayla bağlan" (kendi EVDS anahtarını girmeden, sunucu sahibinin anahtarını kullanarak) komutu, artık asıl önerdiğimiz ve Mac'te test edilen `claude mcp add-json` sözdizimiyle tutarlı hale getirildi (önceden eski `--transport http` biçimindeydi).
+
 ## v0.20.1 (dokümantasyon — son teyit)
 Kurulumu her platformda gerçekten doğruladım (Claude Code Mac/Windows, Claude Desktop, Claude web), iki gerçek sorun buldum ve README'yi buna göre düzelttim:
 
