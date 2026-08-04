@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## v0.19.1 (dokümantasyon)
+- **Windows kurulum kolaylığı:** Claude Code'un yerel (stdio) kurulum komutu (`claude mcp add ... -- uvx --from ...`) PowerShell'de bilinen bir hatadan dolayı "unknown option" veriyor (anthropics/claude-code#15077, #7672, #3825). README artık Claude Code için önce **hosted HTTP bağlantısını** (`claude mcp add --transport http turkiye-veri https://turkiye-veri-mcp.onrender.com/mcp`) öneriyor — kurulum gerektirmiyor, bu hataya hiç uğramıyor, Windows'ta da sorunsuz. Kendi EVDS anahtarını kullanmak isteyenler için yerel kurulum ve Windows'a özel `.bat` sarmalayıcı çözümü de belgelendi.
+
 ## v0.19.0 — SDMX 401 kalıcı olarak çözüldü
 - **Kök neden bulundu:** `nsiws.tuik.gov.tr` (eski SDMX 2.1 servisi) TÜİK tarafından kullanımdan kaldırılmış/kısıtlanmış görünüyor — kullanıcı, tarayıcının Network sekmesinde TÜİK'in kendi yeni web arayüzünün (`databrowser2.tuik.gov.tr`) farklı bir API kullandığını yakaladı.
 - **sdmx.py tamamen bu yeni API'ye taşındı:** `GET .../structure` (varsayılan seçim + boyutlar) ve `POST .../data` (JSON-stat 2.0 formatında veri) ile çalışıyor. Yanıt `pyjstat` ile parse ediliyor (seyrek/eksik hücreleri doğru işliyor).

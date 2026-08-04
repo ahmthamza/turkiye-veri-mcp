@@ -43,8 +43,34 @@ Türkiye'nin iki temel resmi veri kaynağını tek [MCP (Model Context Protocol)
 
 ### Claude Code
 
+**En kolay yol — hazır hosted sunucuya bağlanmak** (kurulum yok, Windows'ta da sorunsuz çalışır):
+
+```bash
+claude mcp add --transport http turkiye-veri https://turkiye-veri-mcp.onrender.com/mcp
+```
+
+TÜİK araçları anahtarsız hemen çalışır. EVDS araçları da çalışır ama sunucu sahibinin EVDS anahtarını/kotasını paylaşır — kendi EVDS anahtarınızı kullanmak isterseniz aşağıdaki yerel kuruluma bakın.
+
+> **Windows kullanıcıları için not:** Claude Code'un `claude mcp add ... -- komut --parametre` şeklindeki yerel (stdio) kurulum komutları PowerShell'de bilinen bir hatadan dolayı "unknown option" hatası verebiliyor ([anthropics/claude-code#15077](https://github.com/anthropics/claude-code/issues/15077)). Yukarıdaki HTTP yöntemi bu sorunu tamamen atlıyor — Windows'ta ilk denenmesi gereken yöntem bu.
+
+**Kendi EVDS anahtarınızla yerel kurulum** (macOS/Linux'ta sorunsuz; Windows'ta yukarıdaki nottaki hata görülebilir):
+
 ```bash
 claude mcp add -e EVDS_API_KEY=ANAHTARINIZ turkiye-veri -- uvx --from git+https://github.com/ahmthamza/turkiye-veri-mcp turkiye-veri-mcp
+```
+
+Windows'ta bu komut hata verirse, bir `.bat` sarmalayıcı dosyası oluşturup `--` içermeyen bir komutla eklemek çözer:
+
+```bat
+@echo off
+set EVDS_API_KEY=ANAHTARINIZ
+uvx --from git+https://github.com/ahmthamza/turkiye-veri-mcp turkiye-veri-mcp
+```
+
+Bu dosyayı ör. `C:\turkiye-veri-mcp\run_turkiye.bat` olarak kaydedip:
+
+```powershell
+claude mcp add turkiye-veri C:\turkiye-veri-mcp\run_turkiye.bat
 ```
 
 ### Claude Desktop
