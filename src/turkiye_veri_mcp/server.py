@@ -534,6 +534,132 @@ def usage_stats(days_recent: int = 7) -> str:
     return _json(usage.summary(days_recent=days_recent))
 
 
+@app.tool()
+@_track
+def bddk_get_data(
+    tablo_no: int = 1,
+    donem: str = "",
+    taraf_list: list[str] | None = None,
+    sehir_list: list[str] | None = None,
+    output_path: str = "",
+    max_rows: int = 90,
+) -> str:
+    """Fetch BDDK FinTürk province-level banking sector data.
+
+    A geographic breakdown (city-level credit/deposit/etc. volumes) that
+    EVDS does not have. All seven tables are verified:
+      1 Krediler (Bin TL), 2 Mevduat (Bin TL), 3 Bireysel Bankacılık (Bin TL),
+      4 Seçilmiş Sektörel Krediler (Bin TL), 5 Oranlar (%),
+      6 Şubeler (Adet) ve Nüfusa Göre Dağılım (TL),
+      7 Altın Kredileri ve Altın Mevduatı (Bin TL)
+
+    Args:
+        tablo_no: Table selector, 1-7 (see list above).
+        donem: Period as "YYYY-M", e.g. "2026-6". Empty uses BDDK's default
+            (the latest published period).
+        taraf_list: Group codes (default ["10001"] = Sektör/whole sector).
+            Valid: 10001 Sektör, 10002 Mevduat, 10003 Kalkınma ve Yatırım,
+            10004 Katılım, 10005 Yabancı, 10006 Kamu, 10007 Yerli Özel.
+        sehir_list: City names (default ["HEPSI"] = all provinces at once).
+            Must be the exact uppercase Turkish province name BDDK uses
+            (e.g. "İSTANBUL", "IĞDIR" -- correct Turkish İ/I, not ASCII);
+            a wrong spelling raises an error rather than silently returning
+            nothing.
+        output_path: Optional CSV path to also write the full result to.
+        max_rows: Rows to include in the chat preview (default 90, enough
+            for all 81 provinces + national total).
+    """
+    from turkiye_veri_mcp.bddk import BddkClient
+
+    frame = BddkClient().get_dataframe(
+        tablo_no=tablo_no, donem=donem, taraf_list=taraf_list, sehir_list=sehir_list
+    )
+    result = {
+        "n_rows": int(frame.shape[0]),
+        "columns": list(frame.columns),
+        "preview_csv": frame.head(max_rows).to_csv(index=False),
+    }
+    if output_path:
+        path = Path(output_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        result["written"] = str(path.resolve())
+    return _json(result)
+
+
+@app.tool()
+@_track
+def hmb_get_data(il_kodu: str, yil: int = 2026, max_rows: int = 500, output_path: str = "") -> str:
+    """Fetch HMB province-level general budget revenue data (Tahakkuk/Tahsilat).
+
+    A province-level budget breakdown that EVDS does not have. Currently
+    only the 2026 table is available (other years use the same API but
+    need their own folder id, not yet captured). Each province's file has
+    one sheet per month published so far, each a hierarchical (indented)
+    revenue statement -- returned here as a tidy long table with the
+    category label, month, and Tahakkuk (accrual)/Tahsilat (collection)
+    in thousand TL.
+
+    Args:
+        il_kodu: Province plate code, "00" (national total) or "01"-"81"
+            (e.g. "34" = İstanbul, "06" = Ankara).
+        yil: Year (only 2026 verified so far).
+        max_rows: Rows to include in the chat preview.
+        output_path: Optional CSV path to also write the full result to.
+    """
+    from turkiye_veri_mcp.hmb import HmbClient
+
+    frame = HmbClient().get_il_data(il_kodu=il_kodu, yil=yil)
+    result = {
+        "n_rows": int(frame.shape[0]),
+        "columns": list(frame.columns),
+        "preview_csv": frame.head(max_rows).to_csv(index=False),
+    }
+    if output_path:
+        path = Path(output_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        result["written"] = str(path.resolve())
+    return _json(result)
+
+
+@app.tool()
+@_track
+def hmb_get_karsilastirma(tablo: str = "denge", yil: int = 2026, max_rows: int = 500, output_path: str = "") -> str:
+    """Fetch HMB's province-by-category crosstab budget tables.
+
+    A different HMB table family than hmb_get_data: instead of one file per
+    province, this is a single file with provinces as rows and budget
+    categories as columns. Covers two levels of government -- Merkezi
+    Yönetim (central government) and Mahalli İdareler (municipalities +
+    provincial special administrations) -- neither has a province
+    breakdown in EVDS.
+
+    Args:
+        tablo: "gider"/"gelir"/"vergi"/"denge" (Merkezi Yönetim, monthly,
+            cumulative through the latest published month) or
+            "mahalli_gider"/"mahalli_gelir"/"mahalli_denge" (Mahalli
+            İdareler, quarterly). All seven verified.
+        yil: Year (only 2026 verified so far).
+        max_rows: Rows to include in the chat preview.
+        output_path: Optional CSV path to also write the full result to.
+    """
+    from turkiye_veri_mcp.hmb import HmbClient
+
+    frame = HmbClient().get_karsilastirma_data(tablo=tablo, yil=yil)
+    result = {
+        "n_rows": int(frame.shape[0]),
+        "columns": list(frame.columns),
+        "preview_csv": frame.head(max_rows).to_csv(index=False),
+    }
+    if output_path:
+        path = Path(output_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        result["written"] = str(path.resolve())
+    return _json(result)
+
+
 def main() -> None:
     """Entry point. Defaults to stdio (Claude Code / Desktop); pass
     --transport http to serve over HTTP for claude.ai custom connectors."""

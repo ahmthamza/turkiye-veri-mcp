@@ -1,5 +1,52 @@
 # Sürüm notları
 
+## v0.27.0 — HMB: Mahalli İdareler eklendi
+- `hmb_get_karsilastirma`'ya 3 yeni tablo: `mahalli_gider`, `mahalli_gelir`, `mahalli_denge` — belediye ve il özel idarelerinin il bazında bütçesi, EVDS'de hiç olmayan bir kırılım. Klasör id'leri doğrulandı (4098/4099/4100).
+- Mevcut crosstab ayrıştırıcı (`crosstab_xls_to_tidy_frame`) hiç değişiklik gerektirmeden bu yeni dosyaları da doğru işledi — Merkezi Yönetim için yazdığımız genel çözüm (tidy.py'nin başlık birleştirme mantığı) burada da geçerli oldu.
+- Çapraz doğrulama: Ankara'nın Mahalli İdareler Gider dosyasındaki TOPLAM (46.259.392), Denge dosyasındaki "BÜTÇE GİDERLERİ" değeriyle birebir eşleşti.
+- HMB artık iki yönetim seviyesini (merkezi + mahalli), 7 crosstab tablosunu ve il bazlı bütçe gelirini kapsıyor — 2026 yılı için.
+
+## v0.26.0 — HMB crosstab ailesinin 4 tablosu da tamam
+- Kullanıcı "Bütçe Gider Tabloları" (id=4044) ve "Bütçe Gelir Tabloları" (id=4045) klasör id'lerini de yakaladı. `hmb_get_karsilastirma` artık 4 tabloyu da destekliyor: `gider`, `gelir`, `vergi`, `denge`.
+- "Gelir Tabloları" klasöründe (id=4045) tek değil **iki** dosya olduğu görüldü (Gelirleri Tahsilatı + Vergi Gelirleri Tahakkuk/Tahsilat) — `get_karsilastirma_data` artık dosya adı örüntüsüyle (`file_match`) doğru dosyayı seçiyor, tek-dosya varsayımı kaldırıldı.
+- Gerçek dosya etiketleriyle 4 eşleştirme de test edildi, hepsi doğru dosyayı buldu. HMB'nin il bazında bütçe verisi artık kapsamlı: harcama, gelir, vergi ve gelir-gider karşılaştırması, hepsi il kırılımıyla.
+
+## v0.25.0 — HMB: crosstab tablo ailesi (İller Bazında Karşılaştırma)
+- **`hmb_get_karsilastirma` aracı eklendi.** "İller İtibarıyla Merkezi Yönetim Bütçe İstatistikleri" — `hmb_get_data`'dan farklı bir aile: il başına ayrı dosya yerine tek dosyada il satır / kategori sütun (crosstab). Şimdilik yalnızca "denge" (gelir/gider karşılaştırması) bağlandı — klasör id'si doğrulandı (4046).
+- **Çok satırlı başlık hatası bulundu ve düzeltildi:** "Gider" dosyasında iki satırlı bir başlık var (grup başlığı "EKONOMİK SINIFLANDIRMA"/"FONKSİYONEL SINIFLANDIRMA" + altında gerçek kategori adları) — ilk yazımda grup başlığı gerçek başlık sanılıp yanlış/eksik sütunlar (2 yerine 20 kategori) üretiyordu. Bunu ayrı bir sezgiyle çözmek yerine bugün TÜİK istab dosyalarında zaten kanıtlanmış `tidy.find_header_block`/`_combine_header_rows`'u yeniden kullandık — artık 19 kategori doğru etiketle geliyor (ör. "EKONOMİK SINIFLANDIRMA — Pers. Giderleri").
+- Çapraz doğrulama: Ankara'nın "Gider" dosyasındaki TOPLAM değeri (610.481.879), "Denge" dosyasındaki "Giderler" değeriyle birebir eşleşti.
+- **Bilinen sınır:** "gider" ve "gelir" (vergi de gelir klasöründe) tabloları için klasör id'leri henüz yakalanmadı, sadece "denge" canlı çalışıyor.
+
+## v0.24.0 — HMB canlı, ilk gerçek veri
+- **`hmb_get_data` aracı eklendi.** muhasebat.hmb.gov.tr'nin JS arayüzünün kullandığı genel dosya listeleme API'si keşfedildi: `GET portal/v2/files?name=<klasör adı>&id=<klasör id>` — HTML gömülü JSON döndürüyor, doğrudan .xls indirme linkleri (gerçek, tahmin edilemeyen hash'leriyle) içeriyor.
+- İl bazında genel bütçe geliri (Tahakkuk/Tahsilat, aylık) — EVDS'de olmayan coğrafi kırılım, il plaka kodlarıyla (00 Merkez, 01-81) erişilebiliyor.
+- Gerçek indirilen dosyayla doğrulandı: Adana, Haziran 2026, Genel Bütçe Gelirleri Tahakkuk = 155.052.887 bin TL.
+- Yeni bağımlılık: `python-calamine` — HMB'nin .xls dosyaları `xlrd`'nin standart okuyucusunu bozan bir kayıt içeriyor (OLE2 imzası geçerli, gerçek ikili format, ama xlrd'nin UTF-16 metin ayrıştırıcısı çöküyor); calamine bunu sorunsuz okuyor.
+- **Bilinen sınır:** yalnızca 2026 yılının klasör id'si biliniyor (4042). Diğer yıllar ve diğer bütçe tabloları (Mahalli İdareler, Merkezi Yönetim, Konsolide) aynı API'yi kullanıyor ama ayrı id gerektiriyor, henüz keşfedilmedi.
+
+## v0.23.0 — BDDK: Grup ve İl kodları tam
+- `TARAF_CODES` eklendi: 7 Grup kırılımı (Sektör, Mevduat, Kalkınma ve Yatırım, Katılım, Yabancı, Kamu, Yerli Özel) — kullanıcı tarafından tek tek 10001-10007 karşılığıyla doğrulandı.
+- `SEHIR_CODES` eklendi: 81 il + "YURT DIŞI", BDDK'nın kendi yanıtındaki tam yazılışla (Türkçe İ/I ayrımı korunarak) — tahmin edilmedi, gerçek veriden alındı.
+- **Sessiz hata koruması:** `bddk_get_data` artık bilinmeyen bir grup kodu ya da yanlış yazılmış bir il adı (ör. Türkçe "İSTANBUL" yerine ASCII "ISTANBUL") verilirse anlaşılır bir hatayla durur. Önceden BDDK bu tür hatalı girdilerde sessizce o kaydı atlıyordu, kullanıcı fark etmeden eksik veri alabilirdi.
+- Artık "sektör toplamı" yanında kamu/özel/yabancı banka ayrımıyla, ya da tek bir il için de sorgu yapılabiliyor — "her mümkün veri" hedefine yaklaşıldı.
+
+## v0.22.2 — BDDK 7 tablonun tamamı doğrulandı
+- Kullanıcı 5-7 numaralı tabloları (Oranlar, Şubeler/Nüfus, Altın) da FinTürk arayüzünde kontrol etti, sıralı örüntü (dropdown sırası = tabloNo) doğrulandı. `bddk_get_data`'nın 7 tablosu artık tahmin değil, tam doğrulanmış durumda.
+
+## v0.22.1 — BDDK 7 tablo
+- `bddk_get_data`, BDDK FinTürk'ün 7 "Bilgi" seçeneğinin tümüyle (Krediler, Mevduat, Bireysel Bankacılık, Seçilmiş Sektörel Krediler, Oranlar, Şubeler/Nüfus Dağılımı, Altın Kredileri/Mevduatı) çalışacak şekilde güncellendi. tabloNo 1-4 kullanıcı tarafından tek tek doğrulandı (sıralı örüntü: dropdown sırası = tabloNo); 5-7 bu doğrulanmış örüntüden çıkarımla dolduruldu, ayrıca teyit edilmedi.
+
+## v0.22.0 — BDDK canlı, ilk gerçek veri
+- **`bddk_get_data` aracı eklendi.** BDDK'nın FinTürk (İllere Göre) interaktif bültenindeki gerçek endpoint'e bağlandı: `POST bddk.org.tr/BultenFinturk/tr/Home/VeriGetir`, form-encoded gövde, jqGrid biçimli JSON yanıt (`colModels` + `data.rows[].cell`).
+- İl bazında kredi verisi (81 il + yurt dışı, toplam/nakdi/takipteki/gayrinakdi krediler) — EVDS'de olmayan coğrafi kırılım, tam hedeflediğimiz boşluk.
+- Gerçek yakalanan yanıtla doğrulandı: İstanbul toplam nakdi kredi = 9.267.774.609 (bin TL), kullanıcının ekran görüntüsüyle birebir eşleşiyor.
+- Bilinen sınır: şimdilik yalnızca tabloNo=1 (Krediler) doğrulandı; "Bilgi" açılır menüsündeki diğer seçenekler (muhtemelen başka tabloNo değerleri) henüz keşfedilmedi. İl kodları da yalnızca "HEPSİ" ile test edildi.
+
+## v0.21.0 — BDDK ve HMB iskeletleri
+- `src/turkiye_veri_mcp/bddk.py` ve `hmb.py` eklendi — CONTRIBUTING.md şablonuna uygun iskelet (client sınıfı, `list_tables`/`get_data` imzaları, `NotImplementedError`). Henüz `server.py`'ye araç olarak bağlanmadı, henüz canlı veri çekmiyor.
+- CONTRIBUTING.md sağlayıcı kuyruğu güncellendi: BDDK ve HMB "inşa halinde" işaretlendi, İşKUR/TOBB eklendi, Belediye/CKAN "araştırma bekliyor" statüsüne indirildi, BIST ve Findeks kapsam dışı olarak not edildi.
+- Sıradaki adım: BDDK'nın FinTürk (İllere Göre) interaktif bülteninde DevTools Network yakalaması.
+
 ## v0.20.2 (dokümantasyon)
 - README'deki "paylaşılan kotayla bağlan" (kendi EVDS anahtarını girmeden, sunucu sahibinin anahtarını kullanarak) komutu, artık asıl önerdiğimiz ve Mac'te test edilen `claude mcp add-json` sözdizimiyle tutarlı hale getirildi (önceden eski `--transport http` biçimindeydi).
 

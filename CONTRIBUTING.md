@@ -80,10 +80,16 @@ class SaglayiciClient:
 
 Öncelik sırası (katkıya açık):
 
-1. **BDDK** — bankacılık: haftalık kredi verileri, sektör bilançosu, FinTürk il bazında. Bülten uygulamaları JavaScript tabanlı; JSON backend keşfi gerekiyor.
-2. **HMB** — kamu maliyesi: merkezi yönetim bütçe gerçekleşmeleri, borç istatistikleri. Excel yayınları; `tidy.py` yeniden kullanılabilir.
-3. **EPİAŞ Şeffaflık** — enerji piyasası; dokümante REST API'si var.
-4. **Belediye açık veri portalları** — CKAN standardı, tek modül birden çok belediyeyi kapsayabilir.
+1. **BDDK** — ✅ **tamamlandı** (v0.23.0). `bddk_get_data` aracı: FinTürk (İllere Göre), 7 tablo (Krediler, Mevduat, Bireysel Bankacılık, Sektörel Krediler, Oranlar, Şubeler, Altın) × 7 grup kırılımı (Sektör/Mevduat/Kalkınma-Yatırım/Katılım/Yabancı/Kamu/Yerli Özel) × 81 il + Yurt Dışı. Endpoint: `POST bddk.org.tr/BultenFinturk/tr/Home/VeriGetir` (jqGrid formatı).
+2. **HMB** — ✅ **kapsamlı** (v0.27.0). İki araç:
+   - `hmb_get_data`: il bazında genel bütçe geliri (Tahakkuk/Tahsilat), 00 (Merkez) + 01-81 il plaka kodu, aylık kırılım.
+   - `hmb_get_karsilastirma`: il × kategori crosstab, 7 tablo — Merkezi Yönetim (gider/gelir/vergi/denge, aylık kümülatif) ve Mahalli İdareler (gider/gelir/denge, üç aylık).
+   Endpoint (ikisi için de): `GET muhasebat.hmb.gov.tr/portal/v2/files?name=...&id=...` (genel bir dosya listeleme API'si, doğrudan .xls indirme linkleri döndürüyor). **Sınır: yalnızca 2026 yılı çalışıyor** — diğer yıllar (2004-2025) ve diğer tablolar (Konsolide 1990-2003) aynı API'yi kullanıyor ama her biri kendi "id" değerini gerektiriyor, henüz yakalanmadı. Not: HMB'nin .xls dosyaları `xlrd` ile açılmıyor (bozuk bir string kaydı) — `python_calamine` kullanılıyor. Çok satırlı başlıklı dosyalarda `tidy.py`'nin `find_header_block`/`_combine_header_rows`'u yeniden kullanılıyor.
+3. **EPİAŞ Şeffaflık** — enerji piyasası; dokümante REST API'si var, düşük öncelik.
+4. **İşKUR, TOBB** — BDDK/HMB bitmeden başlanmayacak.
+5. **Belediye açık veri portalları** — doğrulanmadı, CKAN'da gerçekten araştırmaya değer veri olup olmadığı belirsiz. Araştırma bekliyor.
+
+Kapsam dışı bırakıldı: BIST/borsa (borsa-mcp zaten var, tekrar gerekmiyor), Findeks/KKB (açık istatistik API'si değil, kişisel kredi ürünü — bizim modele uymuyor).
 
 ## Lisans
 
