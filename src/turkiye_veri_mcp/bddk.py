@@ -34,13 +34,22 @@ without a prior page load (untested cookie/session requirement).
 
 from __future__ import annotations
 
+import os
+import ssl
+import tempfile
+from pathlib import Path
 from typing import Any
 
+import certifi
 import httpx
 import pandas as pd
 
 BASE = "https://www.bddk.org.tr/BultenFinturk"
 DATA_URL = f"{BASE}/tr/Home/VeriGetir"
+
+# BDDK'nın göndermediği ara sertifika -- ayrıntı için certs/README.md
+_INTERMEDIATE_FILENAME = "globalsign_rsa_ov_ssl_ca_2018.pem"
+_CA_BUNDLE_CACHE: str | None = None
 
 _HEADERS = {
     "User-Agent": (
@@ -106,6 +115,81 @@ class BddkError(RuntimeError):
     """Raised for BDDK data-access errors."""
 
 
+def _ca_bundle_with_intermediate() -> str:
+    """certifi kök deposu + gömülü GlobalSign ara sertifikası (tek dosya).
+
+    Sonuç geçici bir dosyaya yazılıp önbelleklenir; httpx `verify=` için
+    dosya yolu ister.
+    """
+    global _CA_BUNDLE_CACHE
+    if _CA_BUNDLE_CACHE and os.path.exists(_CA_BUNDLE_CACHE):
+        return _CA_BUNDLE_CACHE
+
+    intermediate = Path(__file__).parent / "certs" / _INTERMEDIATE_FILENAME
+    with open(certifi.where(), "rb") as roots:
+        bundle = roots.read()
+    bundle += b"\n" + intermediate.read_bytes()
+
+    handle = tempfile.NamedTemporaryFile(
+        prefix="turkiye-veri-bddk-ca-", suffix=".pem", delete=False
+    )
+    handle.write(bundle)
+    handle.close()
+    _CA_BUNDLE_CACHE = handle.name
+    return _CA_BUNDLE_CACHE
+
+
+def _post_with_ssl_fallback(
+    url: str, form: dict[str, str], timeout: float
+) -> tuple[httpx.Response, str]:
+    """POST to BDDK, repairing BDDK's incomplete TLS chain when needed.
+
+    bddk.org.tr sends only its leaf certificate and omits the intermediate
+    that signed it ("GlobalSign RSA OV SSL CA 2018"), so a plain Python
+    client fails with CERTIFICATE_VERIFY_FAILED: unable to get local issuer
+    certificate -- confirmed against the live server on 2026-08-05, while
+    the same URL opens fine in a browser (browsers fetch the missing link
+    themselves via the certificate's AIA field; Python's ssl does not).
+
+    Three tiers, strongest first:
+      1. Normal verification -- works if BDDK ever fixes its chain.
+      2. certifi roots PLUS the bundled intermediate. This is still FULL
+         verification: the bundled cert was checked with `openssl verify`
+         to chain BDDK's live leaf up to GlobalSign Root CA - R3, which
+         certifi already trusts. Nothing is disabled here.
+      3. Last resort only: unverified, and the caller says so in its output.
+
+    Returns (response, mode) where mode is one of "verified",
+    "verified-bundled-intermediate", "unverified".
+    """
+    def _is_cert_error(exc: Exception) -> bool:
+        return "CERTIFICATE_VERIFY" in str(exc).upper()
+
+    try:
+        with httpx.Client(timeout=timeout, headers=_HEADERS, follow_redirects=True) as client:
+            return client.post(DATA_URL, data=form), "verified"
+    except (httpx.ConnectError, ssl.SSLError) as exc:
+        if not _is_cert_error(exc):
+            raise
+
+    try:
+        with httpx.Client(
+            timeout=timeout,
+            headers=_HEADERS,
+            follow_redirects=True,
+            verify=_ca_bundle_with_intermediate(),
+        ) as client:
+            return client.post(DATA_URL, data=form), "verified-bundled-intermediate"
+    except (httpx.ConnectError, ssl.SSLError) as exc:
+        if not _is_cert_error(exc):
+            raise
+
+    with httpx.Client(
+        timeout=timeout, headers=_HEADERS, follow_redirects=True, verify=False
+    ) as client:
+        return client.post(DATA_URL, data=form), "unverified"
+
+
 class BddkClient:
     def __init__(self, timeout: float = 60.0) -> None:
         self._timeout = timeout
@@ -151,18 +235,21 @@ class BddkClient:
         for i, value in enumerate(sehir_list):
             form[f"sehirList[{i}]"] = value
 
-        with httpx.Client(timeout=self._timeout, headers=_HEADERS, follow_redirects=True) as client:
-            response = client.post(DATA_URL, data=form)
+        response, tls_mode = _post_with_ssl_fallback(DATA_URL, form, self._timeout)
         if response.status_code != 200:
             raise BddkError(f"BDDK VeriGetir returned HTTP {response.status_code}")
         payload = response.json()
         if not payload.get("success"):
             raise BddkError(f"BDDK VeriGetir reported failure: {payload}")
-        return payload["Json"]
+        body = payload["Json"]
+        body["_tls_mode"] = tls_mode
+        return body
 
-    def get_dataframe(self, **kwargs: Any) -> pd.DataFrame:
-        """get_data'nın sonucunu tidy bir DataFrame'e çevirir."""
-        return jqgrid_to_frame(self.get_data(**kwargs))
+    def get_dataframe(self, **kwargs: Any) -> tuple[pd.DataFrame, str]:
+        """get_data'yı tidy DataFrame'e çevirir; (frame, tls_mode) döner."""
+        body = self.get_data(**kwargs)
+        tls_mode = str(body.get("_tls_mode", "verified"))
+        return jqgrid_to_frame(body), tls_mode
 
 
 def jqgrid_to_frame(json_body: dict[str, Any]) -> pd.DataFrame:

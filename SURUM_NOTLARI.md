@@ -1,5 +1,18 @@
 # Sürüm notları
 
+## v0.29.0 — BDDK SSL sorunu doğru şekilde çözüldü (gevşetme yok)
+- **Kök neden kesinleşti:** `openssl s_client` çıktısı gösterdi ki bddk.org.tr TLS el sıkışmasında yalnızca kendi (leaf) sertifikasını gönderiyor, onu imzalayan ara sertifikayı ("GlobalSign RSA OV SSL CA 2018") göndermiyor. Tarayıcılar eksik halkayı sertifikanın AIA alanındaki adresten indirip zinciri tamamlıyor; Python'un `ssl` modülü bunu yapmıyor.
+- **Çözüm:** Eksik ara sertifika pakete gömüldü (`certs/globalsign_rsa_ov_ssl_ca_2018.pem`, kaynağı sertifikanın kendi AIA adresi). Artık `certifi` kök deposu + bu ara sertifika birleştirilip kullanılıyor — **doğrulama devre dışı bırakılmıyor**, sadece eksik halka tamamlanıyor. Zincir güvenilir GlobalSign Root CA - R3'e kadar gidiyor.
+- **Doğrulama:** `openssl verify` ile, gömülü sertifikanın BDDK'nın canlı leaf sertifikasını certifi köklerine bağladığı teyit edildi (`leaf.pem: OK`). Birleşik paketin Python `ssl` tarafından da sorunsuz yüklendiği (122 kök) ve gerçek (editable olmayan) kurulumda .pem dosyasının pakete dahil edildiği ayrıca test edildi.
+- Üç kademeli mantık: (1) normal doğrulama — BDDK zincirini düzeltirse otomatik buraya döner, (2) gömülü ara sertifikayla tam doğrulama, (3) yalnızca son çare olarak doğrulamasız, ve bu durumda çıktıda açık `uyari` alanı. Kademe 2 kullanıldığında çıktıda bilgilendirici bir `tls_notu` görünür.
+- Yeni bağımlılık: `certifi` (zaten dolaylı olarak vardı, artık açıkça belirtiliyor).
+
+## v0.28.0 — BDDK SSL sertifika sorunu için geri çekilme
+- **Sorun:** Canlı testte `bddk_get_data`, BDDK sunucusuna bağlanırken `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate` hatası verdi. Aynı hata iki bağımsız barındırılan sunucudan doğrulandı; aynı adres masaüstü tarayıcıda sorunsuz açılıyor. Sebep: bddk.org.tr'nin TLS zincirinde eksik bir ara sertifika var — tarayıcılar bunu kendileri tamamlıyor (AIA), Python'un `ssl` modülü tamamlamıyor.
+- **Çözüm (katmanlı):** `bddk.py` artık ÖNCE normal sertifika doğrulamasıyla bağlanmayı deniyor; yalnızca bu spesifik sertifika hatası gelirse doğrulamayı gevşetip tekrar deniyor. Sessizce yapmıyor: `bddk_get_data` çıktısına, bağlantının doğrulanamadığını açıkça söyleyen bir `uyari` alanı ekleniyor.
+- Bu projede emsali var: TCMB EVDS için de özel bir SSL ayarı (OP_LEGACY_SERVER_CONNECT) gerekmişti — TR kamu sunucularında TLS eksiklikleri yaygın.
+- **Risk notu:** BDDK FinTürk kamuya açık toplu bankacılık istatistiği yayınlıyor ve hiçbir kimlik bilgisi gönderilmiyor; doğrulanmamış kanal bir gizlilik riski değil, yalnızca kamuya açık sayıların kaynağının kriptografik teyidi eksik demek. Temiz çözüm, eksik ara sertifikayı pakete gömmek — canlı sunucudan yakalandığında yapılabilir.
+
 ## v0.27.0 — HMB: Mahalli İdareler eklendi
 - `hmb_get_karsilastirma`'ya 3 yeni tablo: `mahalli_gider`, `mahalli_gelir`, `mahalli_denge` — belediye ve il özel idarelerinin il bazında bütçesi, EVDS'de hiç olmayan bir kırılım. Klasör id'leri doğrulandı (4098/4099/4100).
 - Mevcut crosstab ayrıştırıcı (`crosstab_xls_to_tidy_frame`) hiç değişiklik gerektirmeden bu yeni dosyaları da doğru işledi — Merkezi Yönetim için yazdığımız genel çözüm (tidy.py'nin başlık birleştirme mantığı) burada da geçerli oldu.

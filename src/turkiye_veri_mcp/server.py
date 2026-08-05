@@ -571,7 +571,7 @@ def bddk_get_data(
     """
     from turkiye_veri_mcp.bddk import BddkClient
 
-    frame = BddkClient().get_dataframe(
+    frame, tls_mode = BddkClient().get_dataframe(
         tablo_no=tablo_no, donem=donem, taraf_list=taraf_list, sehir_list=sehir_list
     )
     result = {
@@ -579,6 +579,20 @@ def bddk_get_data(
         "columns": list(frame.columns),
         "preview_csv": frame.head(max_rows).to_csv(index=False),
     }
+    if tls_mode == "unverified":
+        result["uyari"] = (
+            "BDDK sunucusunun TLS sertifika zinciri doğrulanamadı ve "
+            "gömülü ara sertifika da yetmedi; veri doğrulanmamış "
+            "bağlantıyla alındı. Kimlik bilgisi gönderilmiyor ve veri "
+            "kamuya açık toplu istatistiktir, ancak sayıların kaynağı "
+            "kriptografik olarak teyit edilmemiştir."
+        )
+    elif tls_mode == "verified-bundled-intermediate":
+        result["tls_notu"] = (
+            "Bağlantı tam doğrulandı. BDDK sunucusu zincirdeki ara "
+            "sertifikayı göndermediği için pakete gömülü GlobalSign ara "
+            "sertifikası kullanıldı (doğrulama devre dışı bırakılmadı)."
+        )
     if output_path:
         path = Path(output_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
