@@ -159,15 +159,27 @@ def _post_with_ssl_fallback(
          certifi already trusts. Nothing is disabled here.
       3. Last resort only: unverified, and the caller says so in its output.
 
+    Each tier first visits the FinTürk landing page to pick up a session
+    cookie before POSTing -- a live 2026-08-05 test hit HTTP 500 posting
+    cold (no prior page visit), matching the same TUIK veriportali pattern
+    (portal.py) where the JSON API rejects requests with no session.
+
     Returns (response, mode) where mode is one of "verified",
     "verified-bundled-intermediate", "unverified".
     """
     def _is_cert_error(exc: Exception) -> bool:
         return "CERTIFICATE_VERIFY" in str(exc).upper()
 
+    def _primed_post(client: httpx.Client) -> httpx.Response:
+        try:
+            client.get(f"{BASE}/tr")
+        except httpx.HTTPError:
+            pass  # priming is best-effort; try the POST regardless
+        return client.post(DATA_URL, data=form)
+
     try:
         with httpx.Client(timeout=timeout, headers=_HEADERS, follow_redirects=True) as client:
-            return client.post(DATA_URL, data=form), "verified"
+            return _primed_post(client), "verified"
     except (httpx.ConnectError, ssl.SSLError) as exc:
         if not _is_cert_error(exc):
             raise
@@ -179,7 +191,7 @@ def _post_with_ssl_fallback(
             follow_redirects=True,
             verify=_ca_bundle_with_intermediate(),
         ) as client:
-            return client.post(DATA_URL, data=form), "verified-bundled-intermediate"
+            return _primed_post(client), "verified-bundled-intermediate"
     except (httpx.ConnectError, ssl.SSLError) as exc:
         if not _is_cert_error(exc):
             raise
@@ -187,7 +199,7 @@ def _post_with_ssl_fallback(
     with httpx.Client(
         timeout=timeout, headers=_HEADERS, follow_redirects=True, verify=False
     ) as client:
-        return client.post(DATA_URL, data=form), "unverified"
+        return _primed_post(client), "unverified"
 
 
 class BddkClient:

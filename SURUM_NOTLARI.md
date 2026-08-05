@@ -1,5 +1,10 @@
 # Sürüm notları
 
+## v0.33.0 — BDDK: HTTP 500 için oturum çerezi denemesi
+- Canlı testte `bddk_get_data` **HTTP 500** verdi (TLS sertifika hatası değil — o düzeltme tuttu, artık farklı bir sorun). Bugün TÜİK'te (sdmx.py, portal.py) görülen aynı örüntüden yola çıkarak: kod, VeriGetir'e soğuk (çerezsiz) POST atıyordu; BDDK'nın sunucusu önce sayfa ziyaretiyle oturum çerezi bekliyor olabilir.
+- Üç TLS kademesinin her biri artık POST'tan önce FinTürk sayfasını (`bddk.org.tr/BultenFinturk/tr`) ziyaret edip aynı bağlantıyla (çerezleriyle) devam ediyor.
+- **Doğrulanmadı** — sandbox'ta BDDK'ya ağ erişimi yok, canlı deploy sonrası test edilmesi gerekiyor. Bu tutmazsa (yine 500 gelirse), sorun muhtemelen bizim kodumuzdan bağımsız, BDDK'nın kendi servisinde.
+
 ## v0.32.0 — HMB: iki gerçek kaynak-veri hatası bulundu ve düzeltildi
 Kullanıcının "eski yılları test etmeden 'bitti' demeyelim" ısrarı iki gerçek, ciddi hatayı ortaya çıkardı:
 
