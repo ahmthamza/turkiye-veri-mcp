@@ -161,7 +161,7 @@ MIT
 - **MEDAS/Biruni veritabanları listelenir, veri çekilmez.** Portal ağacındaki `database` düğümleri link olarak döner.
 - **TÜİK mikroverisi kapsam dışıdır** (kurumsal başvuruyla dağıtılır).
 - **BDDK'da yalnızca FinTürk (İllere Göre) bağlı — diğer bültenler (Günlük/Haftalık/Aylık, Kredi Kartı Bilgileri) henüz eklenmedi.**
-- **HMB'de yalnızca 2026 yılı çalışıyor.** Diğer yıllar (2004-2025) ve diğer tablolar (İller İtibarıyla Konsolide Bütçe İstatistikleri 1990-2003, Genel Bütçe Vergi Gelirlerinden Mahalli İdare ve Fonlara Aktarılan Paylar) aynı `portal/v2/files` API'sini kullanıyor ama her biri kendi klasör "id"sini gerektiriyor — henüz keşfedilmedi.
+- **HMB'de İller İtibarıyla Konsolide Bütçe İstatistikleri 1990-2003, Genel Bütçe Vergi Gelirlerinden Mahalli İdare ve Fonlara Aktarılan Paylar aynı `portal/v2/files` API'sini kullanıyor ama her biri kendi klasör "id"sini gerektiriyor — henüz keşfedilmedi.
 - **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code'da `X-Evds-Api-Key` header'ıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) şu an custom connector'larda özel header desteklemiyor, bu yüzden web'den bağlananlar otomatik olarak sunucu sahibinin kotasını paylaşır. Bu paylaşım bir güvenlik riski değildir (EVDS zaten herkese açık veri sunar) ama yoğun/toplu sorgulardan kaçının — kota tükenirse sunucu sahibinin de erişimi kesintiye uğrar.
 - **EVDS'de sunucu tarafı seri araması yoktur.** `evds_search_series` ilk çağrıda tüm veri gruplarını gezip yerel bir indeks kurar (birkaç dakika), sonrasında anında çalışır. İndeks 7 günden eskiyse kendini yeniler; hemen yenilemek için `refresh=True` kullanın.
 
