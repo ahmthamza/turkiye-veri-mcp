@@ -63,12 +63,28 @@ _HEADERS = {
 # Diğer yıllar/tablolar aynı /portal/v2/files API'sini kullanıyor ama
 # kendi id'lerini gerektiriyor, henüz yakalanmadı.
 KNOWN_FOLDERS: dict[tuple[str, int], dict[str, Any]] = {
-    ("genel-butce-gelirleri-iller", 2026): {
-        "id": 4042,
+    ("genel-butce-gelirleri-iller", yil): {
+        "id": _id,
         "name": "Bütçe Gelir Tabloları",
         "label": "Genel Bütçe Gelirlerinin İller İtibarıyla Tahakkuk ve Tahsilatı",
-    },
+    }
+    for yil, _id in {
+        2026: 4042, 2025: 3946, 2024: 3860, 2023: 3786, 2022: 3342,
+        2021: 3193, 2020: 3061, 2019: 1409, 2018: 1410, 2017: 1411,
+        2016: 1412, 2015: 1413, 2014: 1414, 2013: 1415, 2012: 1416,
+        2011: 1417, 2010: 1418, 2009: 1419, 2008: 1420, 2007: 1421,
+        2006: 1422, 2005: 1423, 2004: 1424,
+    }.items()
 }
+# Tüm 23 yılın id'si (2004-2026) DevTools ile tek tek tıklanıp doğrulandı
+# (Claude for Chrome, 2026-08-05); 2026/2025/2024 için elde bulunan gerçek
+# dosyalarla ayrıca çapraz doğrulandı. İlginç örüntü: 2020-2026 id'leri yıl
+# arttıkça artıyor (daha yeni yükleme = daha yüksek id, beklenen), ama
+# 2004-2019 tam tersi (2019:1409 en düşük, 2004:1424 en yüksek) -- bu 16
+# yılın muhtemelen tek seferde, geriye doğru sırayla toplu yüklendiğini
+# gösteriyor. id'ler yıl başına sabit bir formülle artmıyor (bkz. yukarıdaki
+# 2026→2025→2024 farkları: -96, -86), bu yüzden hâlâ tahmin edilmiyor,
+# her biri gerçekten tıklanıp doğrulandı.
 
 # 00 (Merkez/ulusal toplam) + 01-81 il plaka kodu -- HMB'nin kendi dosya
 # adlarından alındı (2026-08-05), tahmin edilmedi.
@@ -288,26 +304,136 @@ def crosstab_xls_to_tidy_frame(content: bytes, yil: int, kaynak: str) -> pd.Data
     return pd.DataFrame(rows)
 
 
+# Türkçe .upper()'a güvenilmiyor: Python "Nisan"/"Haziran" gibi noktalı-i
+# içeren kelimeleri ASCII "I" ile büyütüyor ("NISAN"), doğru Türkçe hali
+# noktalı "İ" ("NİSAN") -- bu yüzden her ayın olası TÜM büyük/küçük harf
+# yazımları burada elle listeleniyor, .upper()'a güvenilmiyor (bugün
+# TÜİK'te de aynı tuzağa denk gelinmişti).
+_MONTH_SPELLINGS: dict[str, str] = {}
+for _canonical, _variants in {
+    "Ocak": ["OCAK", "Ocak"],
+    "Şubat": ["ŞUBAT", "Şubat"],
+    "Mart": ["MART", "Mart"],
+    "Nisan": ["NİSAN", "NISAN", "Nisan"],
+    "Mayıs": ["MAYIS", "Mayıs"],
+    "Haziran": ["HAZİRAN", "HAZIRAN", "Haziran"],
+    "Temmuz": ["TEMMUZ", "Temmuz"],
+    "Ağustos": ["AĞUSTOS", "Ağustos"],
+    "Eylül": ["EYLÜL", "Eylül"],
+    "Ekim": ["EKİM", "EKIM", "Ekim"],
+    "Kasım": ["KASIM", "Kasım"],
+    "Aralık": ["ARALIK", "Aralık"],
+}.items():
+    for _variant in _variants:
+        _MONTH_SPELLINGS[_variant] = _canonical
+_MONTHS_TR = list(_MONTH_SPELLINGS)  # eşleştirme (recognized/missing) için
+
+
+def _birim_carpani(etiket: str) -> float:
+    """Başlık hücresindeki birim etiketinden ("(Bin TL)", "(Milyar TL.)")
+    değerleri "bin TL"ye normalize eden çarpanı döndürür.
+
+    2004 dosyasında birimin "(Milyar TL.)" olduğu, 2010+ dosyalarında ise
+    "(Bin TL)" olduğu doğrulandı (2026-08-05) -- fark edilmeseydi eski
+    yılların rakamları sessizce 1 milyon kat küçük görünürdü.
+    """
+    normalized = etiket.upper()
+    if "MİLYAR" in normalized or "MILYAR" in normalized:
+        return 1_000_000.0  # 1 milyar TL = 1.000.000 bin TL
+    if "BİN" in normalized or "BIN" in normalized:
+        return 1.0
+    raise HmbError(
+        f"Bilinmeyen birim etiketi: {etiket!r}. Yeni bir birim mi eklendi? "
+        "Sessizce yanlış ölçekte veri dönmemek için burada durduruluyor."
+    )
+
+
+def _fixed_month_names(raw_names: list[str]) -> list[str]:
+    """Sayfa adlarını kanonik forma (Ocak, Şubat, ...) normalize eder;
+    bozuk/tanınmayan tam olarak bir sayfa adını eksik ayla değiştirir.
+
+    2004 dosyasında "Mayıs" sayfasının adı hatalı olarak "00 Merkez"
+    yazıyordu (HMB'nin kendi dosyasındaki bir hata, 2026-08-05'te
+    doğrulandı). 12 ayın 11'i tanınıyor ve tam olarak bir ay eksikse,
+    tanınmayan tek sayfaya o eksik ay adı verilir -- konuma göre tahmin
+    değil, "hangi ay hâlâ eksik" mantığıyla.
+
+    Ayrıca yıllar arasında yazım tutarsız (2004: "Ocak", 2010+: "OCAK") --
+    hepsi burada kanonik başlık-harfli forma (`Ocak`) çevriliyor, tüm
+    yıllarda `ay` sütunu tutarlı olsun diye.
+    """
+    canonical = [_MONTH_SPELLINGS.get(n.strip(), None) for n in raw_names]
+    missing = [m for m in _MONTH_SPELLINGS.values() if m not in canonical]
+    # yalnızca kanonik değerleri tekilleştirilmiş olarak say (aynı ay için
+    # birden fazla yazım varyantı listede tekrar etmesin)
+    missing = list(dict.fromkeys(missing))
+    unrecognized_positions = [i for i, c in enumerate(canonical) if c is None]
+
+    if len(missing) == 1 and len(unrecognized_positions) == 1:
+        canonical[unrecognized_positions[0]] = missing[0]
+
+    return [c if c is not None else raw_names[i] for i, c in enumerate(canonical)]
+
+
 def xls_to_tidy_frame(content: bytes, il_kodu: str, yil: int) -> pd.DataFrame:
     """HMB'nin il bazlı bütçe geliri .xls dosyasını tidy uzun formata çevirir.
 
-    Her sayfa bir aya karşılık gelir (OCAK, ŞUBAT, ...); hiyerarşik
-    (girintili) bir gelir kalemi listesi + Tahakkuk/Tahsilat sütunları
-    içerir. Kalem etiketi baştaki boşluklarıyla birlikte korunur (hiyerarşi
-    seviyesi henüz ayrı bir sütuna ayrıştırılmadı, yeterince dosyada
-    doğrulanmadan yapılmadı).
+    Her sayfa bir aya karşılık gelir; hiyerarşik (girintili) bir gelir
+    kalemi listesi + Tahakkuk/Tahsilat sütunları içerir. Kalem etiketi
+    baştaki boşluklarıyla birlikte korunur (hiyerarşi seviyesi henüz ayrı
+    bir sütuna ayrıştırılmadı, yeterince dosyada doğrulanmadan yapılmadı).
+
+    Sütun konumu dosyaya göre kayıyor -- ör. "00-Merkez" dosyasında kategori
+    0. sütunda, il dosyalarında (ör. Adana) 1. sütunda -- bu yüzden sabit
+    indeks yerine her sayfanın kendi başlık satırından "Tahakkuk"/"Tahsilat"
+    sütunlarının konumu okunuyor.
+
+    İki gerçek HMB kaynak-dosyası tutarsızlığı burada düzeltiliyor
+    (2004 dosyasıyla doğrulandı, 2026-08-05):
+      1. Birim yıla göre değişiyor -- 2010+ dosyalarında "(Bin TL)", 2004
+         dosyasında "(Milyar TL.)". Tüm çıktı "bin_tl" birimine
+         normalize ediliyor (Milyar -> ×1.000.000); aksi halde eski
+         yılların rakamları sessizce 1 milyon kat küçük görünürdü.
+      2. 2004 dosyasında bir sayfa adı bozuk ("Mayıs" yerine "00 Merkez"
+         yazıyor -- HMB'nin kendi dosyasındaki bir hata). 12 ayın tümü
+         beklenirken tam olarak biri eksikse ve tanınmayan tam olarak bir
+         sayfa adı varsa, eksik ay o sayfaya atanıyor (konumdan değil,
+         "hangi ay eksik" mantığından -- tahmin değil).
     """
     workbook = CalamineWorkbook.from_filelike(io.BytesIO(content))
+    sheet_names = _fixed_month_names(list(workbook.sheet_names))
+
     rows: list[dict[str, Any]] = []
-    for sheet_name in workbook.sheet_names:
-        data = workbook.get_sheet_by_name(sheet_name).to_python()
+    for raw_name, ay in zip(workbook.sheet_names, sheet_names):
+        data = workbook.get_sheet_by_name(raw_name).to_python()
+
+        header_row = None
         for row in data:
-            if len(row) < 4:
+            texts = [str(c).strip() for c in row if isinstance(c, str)]
+            if "Tahakkuk" in texts and "Tahsilat" in texts:
+                header_row = row
+                break
+        if header_row is None:
+            continue  # bu sayfada beklenen başlık bulunamadı, atla
+
+        tahakkuk_pos = next(i for i, c in enumerate(header_row) if c == "Tahakkuk")
+        tahsilat_pos = next(i for i, c in enumerate(header_row) if c == "Tahsilat")
+        # Kategori adı her zaman Tahakkuk sütununun hemen bir öncesinde --
+        # bazı dosyalarda (ör. il dosyaları) fazladan boş bir ilk sütun var
+        # ("00-Merkez" dosyasında yok), bu yüzden sabit 0 yerine buradan
+        # türetiliyor. Aynı hücre birim etiketini de taşıyor (ör. "(Bin
+        # TL)", "(Milyar TL.)").
+        kalem_pos = tahakkuk_pos - 1
+        birim_etiketi = str(header_row[kalem_pos]) if kalem_pos < len(header_row) else ""
+        carpan = _birim_carpani(birim_etiketi)
+
+        for row in data:
+            if len(row) <= max(kalem_pos, tahakkuk_pos, tahsilat_pos):
                 continue
-            kalem = row[1] if len(row) > 1 else None
+            kalem = row[kalem_pos]
             if not kalem or not isinstance(kalem, str) or not kalem.strip():
                 continue
-            tahakkuk, tahsilat = row[2], row[3]
+            tahakkuk, tahsilat = row[tahakkuk_pos], row[tahsilat_pos]
             if not isinstance(tahakkuk, (int, float)) and not isinstance(tahsilat, (int, float)):
                 continue  # başlık / birim / boş satır
             rows.append(
@@ -315,10 +441,10 @@ def xls_to_tidy_frame(content: bytes, il_kodu: str, yil: int) -> pd.DataFrame:
                     "il_kodu": il_kodu,
                     "il": IL_SLUGS.get(il_kodu, il_kodu),
                     "yil": yil,
-                    "ay": sheet_name,
+                    "ay": ay,
                     "kalem": kalem.strip(),
-                    "tahakkuk_bin_tl": tahakkuk if isinstance(tahakkuk, (int, float)) else None,
-                    "tahsilat_bin_tl": tahsilat if isinstance(tahsilat, (int, float)) else None,
+                    "tahakkuk_bin_tl": tahakkuk * carpan if isinstance(tahakkuk, (int, float)) else None,
+                    "tahsilat_bin_tl": tahsilat * carpan if isinstance(tahsilat, (int, float)) else None,
                 }
             )
     if not rows:

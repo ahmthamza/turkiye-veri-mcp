@@ -617,7 +617,7 @@ def hmb_get_data(il_kodu: str, yil: int = 2026, max_rows: int = 500, output_path
     Args:
         il_kodu: Province plate code, "00" (national total) or "01"-"81"
             (e.g. "34" = İstanbul, "06" = Ankara).
-        yil: Year (only 2026 verified so far).
+        yil: Year, 2004-2026 (all verified).
         max_rows: Rows to include in the chat preview.
         output_path: Optional CSV path to also write the full result to.
     """

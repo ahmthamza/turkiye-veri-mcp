@@ -1,5 +1,26 @@
 # Sürüm notları
 
+## v0.32.0 — HMB: iki gerçek kaynak-veri hatası bulundu ve düzeltildi
+Kullanıcının "eski yılları test etmeden 'bitti' demeyelim" ısrarı iki gerçek, ciddi hatayı ortaya çıkardı:
+
+- **Birim yıla göre değişiyor.** 2010+ dosyalarında "(Bin TL)", 2004 dosyasında ise **"(Milyar TL.)"** yazıyor. Fark edilmeseydi 2004'ün rakamları sessizce 1 milyon kat küçük görünecekti. Artık her dosyanın kendi birim etiketi okunup "bin TL"ye normalize ediliyor; tanınmayan bir birim gelirse (`_birim_carpani`) sessizce geçmek yerine net hata veriyor.
+- **2004 dosyasında bir sayfa adı bozuk** — "Mayıs" yerine "00 Merkez" yazıyor (HMB'nin kendi dosyasındaki bir hata). 12 ayın 11'i tanınıp tam olarak biri eksikse, tanınmayan sayfaya o eksik ay atanıyor (`_fixed_month_names`) — konumdan tahmin değil, "hangi ay hâlâ eksik" mantığıyla.
+- **Ayrıca bulundu:** Ay adı yazımı yıllar arasında tutarsızdı (2004: "Ocak", 2010+: "OCAK") — hepsi artık kanonik başlık-harfli forma normalize ediliyor.
+- **Türkçe `.upper()` tuzağına iki kez daha denk gelindi** (bugün TÜİK'te de görülmüştü): hem ay adı eşleştirmesinde hem birim etiketinde, Python'un "Nisan"/"Bin" gibi kelimeleri ASCII "I" ile büyütmesi (doğrusu noktalı "İ") sessiz eşleşme hatalarına yol açıyordu; ikisi de sabit yazım listeleriyle düzeltildi.
+- Gerçek 2004 ve 2010 dosyalarıyla uçtan uca doğrulandı; 2024/2025/2026 regresyonu bozulmadı.
+
+## v0.31.0 — HMB: 2004-2026 arası tüm yıllar
+- `hmb_get_data` artık **23 yılın (2004-2026) tamamını** destekliyor. Klasör id'leri Claude for Chrome ile DevTools üzerinden tek tek tıklanıp doğrulandı, tahmin edilmedi.
+- İlginç bulgu: 2020-2026 id'leri yıl arttıkça artıyor (beklenen), ama 2004-2019 tam tersi yönde artıyor (2019 en düşük id, 2004 en yüksek) -- bu 16 yılın muhtemelen tek bir toplu yükleme işleminde, geriye doğru sırayla eklendiğini gösteriyor. id'ler yıl başına sabit bir aralıkla artmadığı için (2026→2025→2024 farkları -96/-86) hiçbir yıl tahminle doldurulmadı.
+
+## v0.30.0 — HMB: 2024-2025 eklendi, sütun kayması hatası düzeltildi
+- `hmb_get_data` artık 2024, 2025 ve 2026'yı destekliyor (klasör id'leri: 4042/3946/3860 -- doğrulandı, tahmin edilmedi).
+- **Gerçek bir hata bulundu ve düzeltildi:** "00-Merkez" (ulusal toplam) dosyasının sütun yapısı il dosyalarından (ör. Adana) farklı çıktı -- il dosyalarında fazladan boş bir ilk sütun var. Sabit sütun indeksi (`row[1]`, `row[2]`, `row[3]`) yerine, her sayfanın kendi başlık satırından "Tahakkuk"/"Tahsilat" sütunlarının gerçek konumu okunuyor artık; kategori sütunu da buna göre dinamik türetiliyor. Hem Adana (regresyon) hem yeni Merkez dosyaları doğru ayrıştırıldığı test edildi.
+- **Not:** Klasör id'leri yıllar arasında sabit bir aralıkla artmıyor (2026:4042, 2025:3946 [-96], 2024:3860 [-86]) -- bu yüzden 2004-2023 için id tahmin edilmedi, her biri ayrıca doğrulanmadan eklenmeyecek.
+
+## v0.29.1 (dokümantasyon)
+- README artık dört kaynağı da (TÜİK, EVDS, BDDK, HMB) kapsıyor — önceden yalnızca TÜİK/EVDS odaklıydı, bugün eklenen 5 araç (`bddk_get_data`, `hmb_get_data`, `hmb_get_karsilastirma`) hiç belgelenmemişti. Araç tabloları, örnek kullanım, teknik notlar (BDDK'nın TLS sertifika durumu, HMB'nin dosya API'si) ve bilinen sınırlar (BDDK'da yalnızca FinTürk, HMB'de yalnızca 2026) eklendi.
+
 ## v0.29.0 — BDDK SSL sorunu doğru şekilde çözüldü (gevşetme yok)
 - **Kök neden kesinleşti:** `openssl s_client` çıktısı gösterdi ki bddk.org.tr TLS el sıkışmasında yalnızca kendi (leaf) sertifikasını gönderiyor, onu imzalayan ara sertifikayı ("GlobalSign RSA OV SSL CA 2018") göndermiyor. Tarayıcılar eksik halkayı sertifikanın AIA alanındaki adresten indirip zinciri tamamlıyor; Python'un `ssl` modülü bunu yapmıyor.
 - **Çözüm:** Eksik ara sertifika pakete gömüldü (`certs/globalsign_rsa_ov_ssl_ca_2018.pem`, kaynağı sertifikanın kendi AIA adresi). Artık `certifi` kök deposu + bu ara sertifika birleştirilip kullanılıyor — **doğrulama devre dışı bırakılmıyor**, sadece eksik halka tamamlanıyor. Zincir güvenilir GlobalSign Root CA - R3'e kadar gidiyor.
