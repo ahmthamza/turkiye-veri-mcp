@@ -190,15 +190,13 @@ MIT
 
 ## Kullanım istatistikleri
 
-Anthropic, başkalarının senin custom connector'ına kaç kez bağlandığını sana göstermez — bu bilgi Anthropic tarafında kalır. Bunun yerine sunucu kendi araç-çağrısı sayacını tutar (kişi değil, çağrı sayar):
+Barındırılan sunucu (turkiye-veri-mcp.onrender.com) kaba bir kullanım sayımı tutar. Her araç çağrısı için yalnızca zaman damgası ve araç adı kaydedilir. HTTP üzerinden gelen bağlantılarda ayrıca istemcinin kendini tanıttığı ad ve sürüm (ör. "claude-code 2.x") ile anonim bir ziyaretçi kimliği tutulur. Bu kimlik, IP adresinizin gizli bir tuzla alınmış ve kısaltılmış HMAC-SHA256 özetidir. Ham IP adresi, EVDS anahtarınız, gönderdiğiniz sorgular ve dönen veriler hiçbir zaman kaydedilmez ve günlüğe yazılmaz. `X-Evds-Api-Key` başlığı gönderirseniz, farklı anahtar sahiplerini saymak için anahtarın da yalnızca aynı şekilde özeti tutulur.
 
-```
-"TÜİK MCP'de kullanım istatistiklerine bak" (usage_stats aracını çağırır)
-```
+Toplu sayılar (kimlik ya da özet içermez) iki yerden görülebilir: `usage_stats` aracı ve herkese açık `/stats` adresi (`/stats?days=30`). Oturum sayısı, tekil ziyaretçi (toplam ve gün gün), istemci türü dağılımı ve araç bazında çağrı sayıları döner.
 
-Ayrıca proxy olarak: **GitHub → repo → Insights → Traffic** (ziyaretçi/klon sayısı) ve **Render dashboard → Metrics** (HTTP istek sayısı) kabaca ilgiyi gösterir.
+Bu sayılar bir tahmindir, kişi sayımı değildir: claude.ai bağlayıcıları Anthropic sunucuları üzerinden geldiği için birçok kişi aynı IP'yi paylaşabilir; tek kişi farklı ağlardan bağlanırsa birden çok sayılır; kendi bilgisayarında stdio ile çalıştıranların kullanımı bu sunucuya hiç ulaşmaz. Render ücretsiz katmanında disk kalıcı olmadığı için kayıt yeniden başlatmada sıfırlanır.
 
-Önemli sınır: Render'ın ücretsiz katmanındaki disk kalıcı değildir, yeniden dağıtımda/yeniden başlatmada sayaç sıfırlanır. Kalıcı bir sayaç isterseniz Render'da ücretli kalıcı disk eklemek gerekir.
+Ek kaba göstergeler: **GitHub → repo → Insights → Traffic** (ziyaretçi/klon sayısı) ve **Render dashboard → Metrics** (HTTP istek sayısı).
 
 ## Yeni veri ve yeni seriler
 

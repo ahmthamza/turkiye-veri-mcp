@@ -147,12 +147,72 @@ async def _healthz(request):
     return PlainTextResponse("ok")
 
 
+@app.custom_route("/stats", methods=["GET"])
+async def _stats(request):
+    # Same aggregates as the usage_stats tool, for a browser. Counts only --
+    # usage.summary() never returns visitor ids or hashes.
+    from starlette.responses import JSONResponse
+
+    try:
+        days = min(max(int(request.query_params.get("days", "7")), 1), 365)
+    except ValueError:
+        days = 7
+    import anyio.to_thread  # mcp dependency; keeps the file read off the event loop
+
+    payload = await anyio.to_thread.run_sync(usage.summary, days)
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+async def _usage_middleware(ctx, call_next):
+    """SDK-level (MCP message) middleware: logs one session event per HTTP
+    initialize / server/discover, and exposes the request's anonymous ids to
+    usage.record() (called by _track, possibly in a worker thread -- the
+    contextvar is copied there). Sees ctx.request (the Starlette Request) on
+    HTTP and None on stdio. Never raises on its own account."""
+    token = ident = None
+    method = getattr(ctx, "method", None)
+    try:
+        if method in ("tools/call", *usage.SESSION_METHODS):
+            headers, peer = usage.http_request_parts(getattr(ctx, "request", None))
+            if headers is not None or peer is not None:
+                ident = usage.identity(headers, peer)
+                token = usage.set_current(ident)
+    except Exception:  # noqa: BLE001
+        ident = None
+    try:
+        result = await call_next(ctx)
+        if ident is not None and method in usage.SESSION_METHODS:
+            try:
+                headers, _ = usage.http_request_parts(ctx.request)
+                name, version = usage.client_info(method, ctx.params, headers)
+                usage.record_session(
+                    protocol_version=getattr(ctx, "protocol_version", None),
+                    client=name,
+                    client_version=version,
+                    ident=ident,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return result
+    finally:
+        if token is not None:
+            usage.reset_current(token)
+
+
+# MCP SDK >= 2.x exposes a message-level middleware list; on 1.x there is none
+# and usage logging falls back to plain call counts.
+if isinstance(getattr(app, "middleware", None), list):
+    app.middleware.append(_usage_middleware)
+
+
 def _json(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=1, default=str)
 
 
 def _track(func):
-    """Log one usage line before running the tool. Never blocks the call."""
+    """Log one usage line before running the tool. Never blocks the call.
+    Over HTTP the line also carries the anonymous visitor id that
+    _usage_middleware put in usage's contextvar; on stdio it does not."""
     import functools
 
     @functools.wraps(func)
@@ -832,11 +892,13 @@ def evds_download_data(
 def usage_stats(days_recent: int = 7) -> str:
     """Show how much this MCP server has been used (this instance's log).
 
-    Counts tool calls, not people: one session calling several tools logs
-    several lines. On a hosted free-tier deployment the count resets on
-    redeploy/restart, so treat it as a rough activity signal, not a durable
-    total. Anthropic does not expose per-connector usage to server owners,
-    so this local counter is the closest available substitute.
+    Tool calls (total, by tool) plus, for the hosted HTTP server, sessions
+    (by client name) and estimated unique visitors (all time, recent window,
+    per day). A visitor is a salted hash of the client IP, so this is an
+    estimate, not a head count -- see 'note' in the output. On a hosted
+    free-tier deployment the log resets on redeploy/restart. Anthropic does
+    not expose per-connector usage to server owners, so this local counter
+    is the closest available substitute. Same data: GET /stats.
 
     Args:
         days_recent: Size of the "recent" window in days (default 7).
