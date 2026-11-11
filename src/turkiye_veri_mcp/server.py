@@ -894,7 +894,10 @@ def usage_stats(days_recent: int = 7) -> str:
 
     Tool calls (total, by tool) plus, for the hosted HTTP server, sessions
     (by client name) and estimated unique visitors (all time, recent window,
-    per day). A visitor is a salted hash of the client IP, so this is an
+    per day, per client name -- a visitor seen with two clients counts under
+    both), and tool calls attributed to a client only when the visitor maps
+    to exactly one client name (the rest: 'birden_cok_veya_bilinmiyor').
+    A visitor is a salted hash of the client IP, so this is an
     estimate, not a head count -- see 'note' in the output. On a hosted
     free-tier deployment the log resets on redeploy/restart. Anthropic does
     not expose per-connector usage to server owners, so this local counter

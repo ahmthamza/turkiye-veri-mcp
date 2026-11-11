@@ -193,11 +193,80 @@ def test_summary_aggregates(log):
     assert s["unique_visitors_by_day"] == {today: 2}
     assert s["unique_evds_key_holders"] == 1
     assert s["calls_per_visitor"] == {"visitors_with_calls": 3, "mean": 1.33, "max": 2}
+    assert s["unique_visitors_by_client"] == {"claude-ai": 2, "claude-code": 1}
+    assert s["unique_visitors_by_client_last_7_days"] == {"claude-ai": 1, "claude-code": 1}
+    assert s["calls_by_client"] == {"claude-code": 2, "claude-ai": 2, "birden_cok_veya_bilinmiyor": 2}
+    assert sum(s["calls_by_client"].values()) == s["total_calls"]
     assert s["first_seen"] and s["last_seen"] and "tahmin" in s["note"]
+    assert "ikisinde de sayılır" in s["note"] and "birden_cok_veya_bilinmiyor" in s["note"]
     # aggregates only: no ids or hashes leak into the summary
     dumped = json.dumps(s)
     for ident in ("aaaa", "bbbb", "old0000000000000", "k1"):
         assert f'"{ident}"' not in dumped
+
+
+def test_summary_visitors_and_calls_by_client(log):
+    shared, cursor_only, no_session, other = "a" * 16, "b" * 16, "c" * 16, "d" * 16
+    _write(
+        log,
+        [
+            # 'shared' used two clients: counts under both, its calls stay unattributed
+            {"ts": _ts(1), "event": "session", "client": "Cursor", "v": shared},
+            {"ts": _ts(1), "event": "session", "client": "claude-code", "v": shared},
+            {"ts": _ts(1), "tool": "tuik_get_data", "v": shared},
+            {"ts": _ts(1), "tool": "tuik_get_data", "v": shared},
+            # one client only, seen in two sessions: one visitor, calls attributed
+            {"ts": _ts(1), "event": "session", "client": "Cursor", "v": cursor_only},
+            {"ts": _ts(0), "event": "session", "client": "Cursor", "v": cursor_only},
+            {"ts": _ts(0), "tool": "evds_get_data", "v": cursor_only},
+            # calls but no session event (e.g. log began mid-session): unattributed
+            {"ts": _ts(0), "tool": "bddk_metadata", "v": no_session},
+            # only an old session: in the all-time map, not in the recent one
+            {"ts": _ts(40), "event": "session", "client": "AnthropicClaudeAI", "v": other},
+            {"ts": _ts(40), "tool": "hmb_get_data", "v": other},
+            # session without a visitor id: client key exists with 0 visitors
+            {"ts": _ts(0), "event": "session", "client": "probe"},
+            # stdio call (no visitor id): unattributed
+            {"ts": _ts(0), "tool": "usage_stats"},
+        ],
+    )
+    s = usage.summary(days_recent=7)
+    assert s["unique_visitors"] == 4
+    assert s["sessions_by_client"] == {"Cursor": 3, "claude-code": 1, "AnthropicClaudeAI": 1, "probe": 1}
+    assert s["unique_visitors_by_client"] == {"Cursor": 2, "AnthropicClaudeAI": 1, "claude-code": 1, "probe": 0}
+    assert s["unique_visitors_by_client_last_7_days"] == {"Cursor": 2, "claude-code": 1}
+    assert s["calls_by_client"] == {"birden_cok_veya_bilinmiyor": 4, "AnthropicClaudeAI": 1, "Cursor": 1}
+    assert sum(s["calls_by_client"].values()) == s["total_calls"] == 6
+    # the recent-window key follows days_recent
+    s1 = usage.summary(days_recent=1)
+    assert "unique_visitors_by_client_last_7_days" not in s1
+    assert s1["unique_visitors_by_client_last_1_days"] == {"Cursor": 1}
+    # aggregates only
+    dumped = json.dumps(s) + json.dumps(s1)
+    for ident in (shared, cursor_only, no_session, other):
+        assert ident not in dumped
+
+
+def test_summary_by_client_tolerates_corrupt_lines(log):
+    _write(
+        log,
+        [
+            {"ts": _ts(0), "event": "session", "client": "Cursor", "v": "e" * 16},
+            '{"ts": "x", "event": "session", "client": "Cursor", "v": "ffff',  # truncated
+            "not json",
+            '["session"]',
+            {"ts": "bad-date", "event": "session", "client": "Cursor", "v": "f" * 16},
+            {"ts": _ts(0), "event": "session", "client": "Cursor", "v": 12345},  # non-string id
+            {"ts": _ts(0), "tool": "tuik_get_data", "v": "e" * 16},
+        ],
+    )
+    s = usage.summary()
+    assert s["skipped_lines"] == 3
+    assert s["total_sessions"] == 3
+    # bad-date line counts all-time but not in the recent window; numeric v ignored
+    assert s["unique_visitors_by_client"] == {"Cursor": 2}
+    assert s["unique_visitors_by_client_last_7_days"] == {"Cursor": 1}
+    assert s["calls_by_client"] == {"Cursor": 1}
 
 
 def test_summary_per_day(log):
@@ -241,6 +310,8 @@ def test_summary_empty(log):
     s = usage.summary()
     assert s["total_calls"] == 0 and s["total_sessions"] == 0 and s["unique_visitors"] == 0
     assert "calls_last_7_days" in s and s["note"].startswith("Henüz kayıt yok")
+    assert s["unique_visitors_by_client"] == {} and s["unique_visitors_by_client_last_7_days"] == {}
+    assert s["calls_by_client"] == {}
 
 
 def test_middleware_logs_session_only_for_http(log):
@@ -365,6 +436,9 @@ def test_http_server_counts_sessions_and_visitors(tmp_path):
         assert stats["unique_evds_key_holders"] == 1
         assert stats["total_calls"] == 3 and stats["by_tool"] == {"usage_stats": 3}
         assert stats["calls_per_visitor"]["visitors_with_calls"] == 2
+        assert stats["unique_visitors_by_client"] == {"client-a": 1, "client-b": 1}
+        assert stats["unique_visitors_by_client_last_7_days"] == {"client-a": 1, "client-b": 1}
+        assert stats["calls_by_client"] == {"client-a": 2, "client-b": 1}
         assert "note" in stats
         assert _get_json(base + "/stats?days=1")["calls_last_1_days"] == 3
 

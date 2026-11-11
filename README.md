@@ -70,7 +70,7 @@ Ortak ilke: araçlar doğrulayamadığı sayıyı sessizce döndürmez; ya kayna
 
 ### En kolay yol — hazır hosted sunucuya bağlanmak
 
-Kurulum gerektirmez, hiçbir platformda `uvx`/Python derdi yok. Sunucu zaten `https://turkiye-veri-mcp.onrender.com/mcp` adresinde çalışıyor. TÜİK, BDDK ve HMB araçları herkes için anahtarsız çalışır. EVDS araçları için üç platformun **desteği farklı** — aşağıda platform platform, hangisinin kendi anahtarınızı kullanmanıza izin verdiği net yazıyor.
+Kurulum gerektirmez, hiçbir platformda `uvx`/Python derdi yok. Sunucu zaten `https://turkiye-veri-mcp.onrender.com/mcp` adresinde çalışıyor. TÜİK, BDDK ve HMB araçları herkes için anahtarsız çalışır. EVDS araçları için dört platformun (Claude Code, Claude Desktop, claude.ai, Cursor) **desteği farklı** — aşağıda platform platform, hangisinin kendi anahtarınızı kullanmanıza izin verdiği net yazıyor.
 
 #### Claude Code (Mac ve Windows) — kendi EVDS anahtarınızla
 
@@ -120,6 +120,62 @@ claude.ai'nin connector arayüzü şu anda **özel header desteklemiyor** (Anthr
 ```
 https://turkiye-veri-mcp.onrender.com/mcp
 ```
+
+#### Cursor — paylaşılan kota ya da kendi EVDS anahtarınız
+
+Cursor, MCP sunucularını bir `mcp.json` dosyasından okur: yalnızca o projede kullanmak için proje klasöründe `.cursor/mcp.json`, tüm projelerde kullanmak için ev dizininizde `~/.cursor/mcp.json` (Windows'ta `%USERPROFILE%\.cursor\mcp.json`). İkisi birleştirilir; aynı ad ikisinde de varsa proje dosyası geçerli olur. Uzak (URL) sunucular `url` alanıyla eklenir, ek araç gerekmez.
+
+**Paylaşılan kota (anahtarsız):** TÜİK, BDDK ve HMB araçları çalışır; EVDS araçları sunucu sahibinin anahtarını kullanır.
+
+```json
+{
+  "mcpServers": {
+    "turkiye-veri": {
+      "url": "https://turkiye-veri-mcp.onrender.com/mcp"
+    }
+  }
+}
+```
+
+**Kendi EVDS anahtarınızla:** Cursor uzak sunucular için `headers` alanını destekliyor; anahtarınızı `X-Evds-Api-Key` başlığıyla gönderin.
+
+```json
+{
+  "mcpServers": {
+    "turkiye-veri": {
+      "url": "https://turkiye-veri-mcp.onrender.com/mcp",
+      "headers": {
+        "X-Evds-Api-Key": "ANAHTARINIZ"
+      }
+    }
+  }
+}
+```
+
+Proje dosyası git'e gidecekse anahtarı dosyaya yazmak yerine `"X-Evds-Api-Key": "${env:EVDS_API_KEY}"` yazıp anahtarı ortam değişkeni olarak tanımlayabilirsiniz (Cursor `headers` içindeki `${env:...}` değişkenlerini çözer; değişkeni tanımladıktan sonra Cursor'ı yeniden başlatın).
+
+Dosyayı kaydedip Cursor'ı yeniden başlatın. Bağlantıyı kontrol etmek için kenar çubuğunda **Customize → MCPs** bölümünü açın: `turkiye-veri` listede görünmeli ve anahtarı açık olmalı; sohbette ajan araçları (`tuik_*`, `evds_*` …) kullanabilmeli. Görünmüyorsa **Output** panelini açıp (Mac'te Cmd+Shift+U, Windows'ta Ctrl+Shift+U) açılır listeden **MCP Logs**'u seçin; bağlantı ve kimlik hataları orada yazar. Yanlış bir EVDS anahtarı bağlantıyı bozmaz: TÜİK/BDDK/HMB araçları çalışır, EVDS araçları "EVDS rejected the API key (HTTP 401)" hatası verir.
+
+Hosted sunucu Render'ın ücretsiz katmanında çalışıyor: bir süre kullanılmayınca uykuya geçer, bu yüzden boşta kaldıktan sonraki ilk bağlantı **bir dakikaya kadar** sürebilir. İlk denemede zaman aşımı görürseniz biraz bekleyip tekrar deneyin.
+
+**Yerel alternatif (uv gerektirir):** Sunucuyu kendi bilgisayarınızda stdio ile çalıştırmak için anahtarı `env` alanında verin:
+
+```json
+{
+  "mcpServers": {
+    "turkiye-veri": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/ahmthamza/turkiye-veri-mcp", "turkiye-veri-mcp"],
+      "env": {
+        "EVDS_API_KEY": "ANAHTARINIZ"
+      }
+    }
+  }
+}
+```
+
+(Bu yapılandırma örnekleri Cursor'ın belgelerine göre yazıldı ve hosted sunucunun başlıklı/başlıksız bağlantısı gerçek bir MCP istemcisiyle doğrulandı; Cursor'ın kendisi içinde ayrıca denenmedi.)
 
 ### Kendi bilgisayarınızda çalıştırmak (yerel kurulum)
 
@@ -185,14 +241,14 @@ MIT
 - **EVDS:** sunucu tarafı seri araması ve "son N gözlem" ucu yoktur; ikisi de istemci tarafında yapılır. `evds_search_series` dizini ilk kullanımda arka planda kurulur (yaklaşık 8 dakika), 7 günde bir yenilenir; dizin hazır değilken eşleşen veri grupları döner.
 - **BDDK:** Günlük Bülten'in geçmişi yayımlanmıyor (yalnızca son gün ve kalem başına son ~7 iş günü). Kredi kartı ücretleri bülteni (banka bazında ücret bilgisi) ve "Üç Aylık Temel Göstergeler" bağlı değil. FinTürk altın tablosu 2015-9'da başlar. Aylık Bülten'de 6 tablo yalnızca TL'dir.
 - **HMB:** `hmb_get_file` ile örneklenen 854 tablo türünden 298'i tabloya çevriliyor; kalanlar (muhasebe bazlı tablolar, GFS dosyaları, birçok ulusal Mahalli İdare/SGK tablosu, PDF bültenler) yalnızca ham dosya olarak iner. Mahalli İdareler il tabloları 2022 için birim etiketi olmadığından reddedilir. İl dosyalarının toplamı ile Merkezi Yönetim il tablosu 2006'dan itibaren %0,3–1,3 farklıdır (HMB'nin iki ayrı yayını).
-- **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code'da `X-Evds-Api-Key` başlığıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) özel başlık desteklemediği için web'den bağlananlar sunucu sahibinin kotasını paylaşır; yoğun/toplu sorgulardan kaçının.
+- **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code ve Cursor'da `X-Evds-Api-Key` başlığıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) özel başlık desteklemediği için web'den bağlananlar sunucu sahibinin kotasını paylaşır; yoğun/toplu sorgulardan kaçının.
 - **Hosted sunucuda `output_path` sunucunun diskine yazar**, sizin bilgisayarınıza değil; dosya çıktısı için yerel kurulum kullanın.
 
 ## Kullanım istatistikleri
 
 Barındırılan sunucu (turkiye-veri-mcp.onrender.com) kaba bir kullanım sayımı tutar. Her araç çağrısı için yalnızca zaman damgası ve araç adı kaydedilir. HTTP üzerinden gelen bağlantılarda ayrıca istemcinin kendini tanıttığı ad ve sürüm (ör. "claude-code 2.x") ile anonim bir ziyaretçi kimliği tutulur. Bu kimlik, IP adresinizin gizli bir tuzla alınmış ve kısaltılmış HMAC-SHA256 özetidir. Ham IP adresi, EVDS anahtarınız, gönderdiğiniz sorgular ve dönen veriler hiçbir zaman kaydedilmez ve günlüğe yazılmaz. `X-Evds-Api-Key` başlığı gönderirseniz, farklı anahtar sahiplerini saymak için anahtarın da yalnızca aynı şekilde özeti tutulur.
 
-Toplu sayılar (kimlik ya da özet içermez) iki yerden görülebilir: `usage_stats` aracı ve herkese açık `/stats` adresi (`/stats?days=30`). Oturum sayısı, tekil ziyaretçi (toplam ve gün gün), istemci türü dağılımı ve araç bazında çağrı sayıları döner.
+Toplu sayılar (kimlik ya da özet içermez) iki yerden görülebilir: `usage_stats` aracı ve herkese açık `/stats` adresi (`/stats?days=30`). Oturum sayısı, tekil ziyaretçi (toplam, gün gün ve istemci başına), istemci türü dağılımı ve araç bazında çağrı sayıları döner. İki istemci kullanan bir ziyaretçi her ikisinde de sayılır.
 
 Bu sayılar bir tahmindir, kişi sayımı değildir: claude.ai bağlayıcıları Anthropic sunucuları üzerinden geldiği için birçok kişi aynı IP'yi paylaşabilir; tek kişi farklı ağlardan bağlanırsa birden çok sayılır; kendi bilgisayarında stdio ile çalıştıranların kullanımı bu sunucuya hiç ulaşmaz. Render ücretsiz katmanında disk kalıcı olmadığı için kayıt yeniden başlatmada sıfırlanır.
 

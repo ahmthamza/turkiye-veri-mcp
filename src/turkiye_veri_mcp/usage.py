@@ -265,6 +265,8 @@ def http_request_parts(request: Any) -> tuple[Mapping[str, str] | None, str | No
 # Reading
 # ---------------------------------------------------------------------------
 
+_CALLS_UNATTRIBUTED = "birden_cok_veya_bilinmiyor"
+
 _NOTE = (
     "Bu sayılar bir tahmindir, kişi sayımı değildir. 'Ziyaretçi', istemci IP "
     "adresinin tuzlanmış ve kısaltılmış özetidir (ham IP saklanmaz). claude.ai "
@@ -276,7 +278,15 @@ _NOTE = (
     "açabilir. Kendi bilgisayarında stdio ile (yerel kurulum) çalıştıranlar bu "
     "sunucuya hiç ulaşmaz ve burada görünmez. Render ücretsiz katmanında bu "
     "kayıt yeniden başlatma veya yeniden dağıtımda sıfırlanır; sayılar yalnızca "
-    "first_seen tarihinden bu yana geçerlidir."
+    "first_seen tarihinden bu yana geçerlidir. unique_visitors_by_client "
+    "(ve son N gün karşılığı) aynı uyarılarla bir tahmindir: her istemci adı "
+    "için, o adla oturum açan farklı ziyaretçi sayısıdır; iki istemci kullanan "
+    "(veya aynı IP'yi paylaşan) bir ziyaretçi ikisinde de sayılır, bu yüzden "
+    "toplamı unique_visitors'ı aşabilir. calls_by_client, araç çağrılarını "
+    "ziyaretçinin oturumlarındaki istemciye bağlar; yalnızca ziyaretçi günlükte "
+    "tam olarak bir istemci adıyla görünüyorsa atanır. Birden çok istemcili, "
+    "hiç oturum kaydı olmayan veya ziyaretçi kimliği olmayan (stdio) çağrılar "
+    f"'{_CALLS_UNATTRIBUTED}' altında toplanır."
 )
 
 
@@ -294,6 +304,9 @@ def summary(days_recent: int = 7) -> dict[str, Any]:
     key_holders: set[str] = set()
     per_day: defaultdict[str, set[str]] = defaultdict(set)
     calls_per_visitor: Counter[str] = Counter()
+    visitors_by_client: defaultdict[str, set[str]] = defaultdict(set)
+    recent_visitors_by_client: defaultdict[str, set[str]] = defaultdict(set)
+    clients_of_visitor: defaultdict[str, set[str]] = defaultdict(set)
     first_ts: str | None = None
     last_ts: str | None = None
     cutoff = time.time() - days_recent * 86400
@@ -335,7 +348,14 @@ def summary(days_recent: int = 7) -> dict[str, Any]:
                 if kind == "session":
                     sessions += 1
                     recent_sessions += is_recent
-                    by_client[str(event.get("client") or "unknown")] += 1
+                    client = str(event.get("client") or "unknown")
+                    by_client[client] += 1
+                    visitors_by_client[client]  # every client gets a key, even without ids
+                    if visitor:
+                        visitors_by_client[client].add(visitor)
+                        clients_of_visitor[visitor].add(client)
+                        if is_recent:
+                            recent_visitors_by_client[client].add(visitor)
                 elif kind == "tool":
                     total_calls += 1
                     recent_calls += is_recent
@@ -355,6 +375,23 @@ def summary(days_recent: int = 7) -> dict[str, Any]:
                     key_holders.add(event["k"])
 
     counts = list(calls_per_visitor.values())
+
+    # Tool calls -> client, only when the visitor maps to exactly one client
+    # name across all session events in the log; everything else (several
+    # clients, no session event, no visitor id at all) goes to one bucket.
+    calls_by_client: Counter[str] = Counter()
+    for visitor, n in calls_per_visitor.items():
+        clients = clients_of_visitor.get(visitor)
+        if clients is not None and len(clients) == 1:
+            calls_by_client[next(iter(clients))] += n
+        else:
+            calls_by_client[_CALLS_UNATTRIBUTED] += n
+    without_visitor = total_calls - sum(calls_per_visitor.values())
+    if without_visitor:
+        calls_by_client[_CALLS_UNATTRIBUTED] += without_visitor
+
+    def _by_size(groups: Mapping[str, set[str]]) -> dict[str, int]:
+        return dict(sorted(((c, len(ids)) for c, ids in groups.items()), key=lambda kv: (-kv[1], kv[0])))
     return {
         # existing keys (unchanged meaning)
         "total_calls": total_calls,
@@ -369,6 +406,9 @@ def summary(days_recent: int = 7) -> dict[str, Any]:
         "unique_visitors": len(visitors),
         f"unique_visitors_last_{days_recent}_days": len(recent_visitors),
         "unique_visitors_by_day": {day: len(per_day[day]) for day in sorted(per_day)},
+        "unique_visitors_by_client": _by_size(visitors_by_client),
+        f"unique_visitors_by_client_last_{days_recent}_days": _by_size(recent_visitors_by_client),
+        "calls_by_client": dict(calls_by_client.most_common()),
         "unique_evds_key_holders": len(key_holders),
         "calls_per_visitor": {
             "visitors_with_calls": len(counts),
