@@ -1,5 +1,12 @@
 # Sürüm notları
 
+## v0.36.0 — TÜİK istab: 1.746 tablonun 1.700'ü ölçüldü, sessiz hatalı çıktılar kapatıldı
+- `tuik_get_table_data` katalogdaki 1.746 tablonun indirilen 1.700'ünde ölçüldü (246'sı kurallar tasarlanırken hiç bakılmayan ayrı küme): %95'i çevrilir, %4'ü güvenle okunamadığı için açık hatayla reddedilir. Kaynak Excel hücresine kadar izlenen değerlerde tam doğrulanma oranı %78,9'dan %87,5'e (ayrı kümede %80,4'ten %86,6'ya) çıktı.
+- **Hata düzeltmesi:** önceki sürüm aynı etiketle iki farklı sayı veren tabloları (56 dosya) ve kod listelerini sessizce döndürüyordu; artık reddediliyor. Başlık yılları, satır numaraları ve CPA/ISCO kodları değer olarak verilmiyor; atlanan her şey `atlananlar`'da listelenir.
+- Güven düzeyleri anlam kazandı: "yüksek" yalnızca yapısı tablonun kendisinden kurulan düz tablolar içindir; çıkarımla kurulan yapılar "orta" döner (`yapi_cikarimi`), bazı sayfa/sütunları atlanan tablolar "kısmi". Kaynağa kadar doğrulanamayan değer içeren hiçbir tablo "yüksek" dönmez.
+- Dönem tabloda yoksa başlık, sayfa adı ya da katalogdan yalnızca tek ve tutarlı bir dönem varsa alınır (`donem_kaynak`); "2015-2024" gibi aralıklardan dönem çıkarılmaz.
+- Çıktı değişiklikleri: `donem` her zaman metin; yeni sütunlar `bolum` (başlık yolu), `<sütun>_en` (alt satırdaki İngilizce etiket), `donem_kaynak`; yeni rapor alanları `donem_kaynagi`, `varsayimlar`, `atlananlar`, `yapi_cikarimi`, `tidy_confidence_aciklama`.
+
 ## v0.35.0 — HMB: tabloya çevrilen dosya 1.559 → 4.008; kullanım sayacı; Cursor
 **HMB (`hmb_get_file`)**
 - Yeni doğrulanan düzenler: mizan, bilanço (tek yıl ve karşılaştırmalı), mali varlık-yükümlülük, iç-dış borç, şarta bağlı, nakit akış, faaliyet sonuçları ile Ekod/Fkod/kurumsal/denge tabloları (Ocak-Mart, Nisan-Haziran gibi dönem aralıklı). İl dışı 4.360 dosyalık envanterde tabloya çevrilen dosya 1.559'dan 4.008'e çıktı.

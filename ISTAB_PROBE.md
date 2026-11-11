@@ -1,53 +1,109 @@
-# istab Sonda Raporu — turkiye-veri-mcp (2026-11-11)
+# istab Ölçüm Raporu — turkiye-veri-mcp (2026-11-11)
 
-Örneklem: tema başına en fazla 8 dosya, toplam **139** istab dosyası indirilip açıldı.
+Diskteki **1700** istab dosyası `tidy_istab` ile çevrimdışı ölçüldü (indirme denemesi başarısız olan: 4; katalogun geri kalanı için aşağıdaki 'Kapsam' bölümüne bakın).
 
-| Sınıf | Adet | Pay | Anlamı |
-| --- | ---: | ---: | --- |
-| multiheader | 109 | %78.4 | aile başına tek kural ile parse edilir |
-| multisheet | 1 | %0.7 | döngü + aynı kural ile parse edilir |
-| crosstab | 24 | %17.3 | unpivot kuralı gerekir |
-| error | 5 | %3.6 | indirme/açma hatası — ayrıca incelenmeli |
+## Sonuç dağılımı
 
-**Şekilsel tavan:** 134/134 (%100.0 — indirilebilen dosyalar içinde) bilinen bir şablona uyuyor. Bu, dosyanın *şekline* bakan kaba bir ölçümdür; aşağıdaki 'Gerçek tidy başarısı' asıl cevaptır.
+| Sonuç | Adet | Pay |
+| --- | ---: | ---: |
+| yüksek | 459 | %27.0 |
+| orta | 1152 | %67.8 |
+| kısmi | 19 | %1.1 |
+| reddedildi | 70 | %4.1 |
 
-## Gerçek tidy başarısı (tuik_get_table_data ile)
+Güven düzeyleri: **yüksek** = düz ızgara; etiketler doğrudan başlık hücrelerinden (en fazla 2 başlık satırı), dönem tablonun içinden; **orta** = tüm sayfalar okundu ama dönem başlık/sayfa adı/katalogdan alındı ya da bulunamadı (`donem_kaynagi`) veya yapı çıkarımla kuruldu (`yapi_cikarimi`); **kısmi** = bazı sayfa/satır/sütunlar atlandı (listelenir); **reddedildi** = güvenle okunamadı, sayı döndürülmedi.
 
-İndirilen **134** dosyanın **131** tanesi (%97.8) `tuik_get_table_data` aracıyla tidy uzun formata çevrildi (güven: yüksek 80, orta 51). Kalanlar açık bir hata ile reddedildi (yanlış sayı döndürmek yerine). Bu, dosya şekline bakan sınıflandırmadan farklı olarak gerçek aracın çalıştırılmasıyla ölçülmüştür; sayıların doğruluğunu tek tek kanıtlamaz.
+## Tasarım kümesi ve ayrılmış (held-out) küme
 
-Tidy edilemeyenler:
+URL'nin özetine göre rastgele %15'lik bir küme (248 dosya) kurallar tasarlanırken hiç incelenmedi; sonuçlar ayrı raporlanır.
 
-- Eğitim — Cinsiyet, yaş grubu ve ayrıntılı nedenlere göre yaygın eğitime katılım: no sheet could be tidied: t3: value column 'Yaş grubu-Age group' holds only year numbers; the layout was not recognised safely
-- Fiyat İstatistikleri — Hizmet Üretici Fiyat Endeksi- Kısım ve Bölümler (2017=100) CPA 2.1: no sheet could be tidied: 191_t: value column 'Services producer price index, 2017=100, by sections and div' holds only year numbers; the layout was not recognised safely
-- Fiyat İstatistikleri — Yurt İçi Üretici Fiyat Endeksi- Kısım, Bölüm ve Gruplar (2003=100) CPA 2008: no sheet could be tidied: 18_t13: value column 'Domestic producer price index, 2003=100, historic series by ' holds only year numbers; the layout was not recognised safely
+| Sonuç | Tasarım | Ayrılmış |
+| --- | ---: | ---: |
+| yüksek | 394 (%27.1) | 65 (%26.2) |
+| orta | 985 (%67.8) | 167 (%67.3) |
+| kısmi | 15 (%1.0) | 4 (%1.6) |
+| reddedildi | 58 (%4.0) | 12 (%4.8) |
 
-## Tema bazında
+## Dönemin kaynağı (sayfa başına)
 
-| Tema | clean | multiheader | multisheet | crosstab | nontabular | error |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Adalet ve Seçim | 0 | 3 | 0 | 0 | 0 | 5 |
-| Bilim, Teknoloji ve Bilgi Toplumu | 0 | 6 | 0 | 2 | 0 | 0 |
-| Eğitim | 0 | 7 | 0 | 1 | 0 | 0 |
-| Enerji | 0 | 3 | 0 | 0 | 0 | 0 |
-| Fiyat İstatistikleri | 0 | 5 | 0 | 3 | 0 | 0 |
-| Gelir, Tüketim ve Yoksulluk | 0 | 7 | 0 | 1 | 0 | 0 |
-| İstihdam, İşsizlik ve Ücret | 0 | 5 | 1 | 2 | 0 | 0 |
-| Kısa Dönemli Ekonomik Göstergeler | 0 | 8 | 0 | 0 | 0 | 0 |
-| Kültür ve Spor | 0 | 6 | 0 | 2 | 0 | 0 |
-| Nüfus ve Demografi | 0 | 7 | 0 | 1 | 0 | 0 |
-| Sağlık ve Sosyal Koruma | 0 | 7 | 0 | 1 | 0 | 0 |
-| Tarım | 0 | 7 | 0 | 1 | 0 | 0 |
-| Turizm | 0 | 8 | 0 | 0 | 0 | 0 |
-| Ulaştırma ve Haberleşme | 0 | 6 | 0 | 2 | 0 | 0 |
-| Ulusal Hesaplar | 0 | 8 | 0 | 0 | 0 | 0 |
-| Uluslararası Ticaret | 0 | 7 | 0 | 1 | 0 | 0 |
-| Yapısal Ekonomik Göstergeler ve İş Demografisi | 0 | 4 | 0 | 4 | 0 | 0 |
-| Çok Boyutlu İstatistikler | 0 | 5 | 0 | 3 | 0 | 0 |
+| Kaynak | Sayfa |
+| --- | ---: |
+| tablo | 1169 |
+| başlık | 277 |
+| yok | 114 |
+| katalog yolu | 62 |
+| katalog adı | 19 |
+| sayfa adı | 1 |
 
-## Sorunlu örnekler
+## Ret nedenleri
 
-- [error/PortalError: TÜİK portalı indirme hız sınırına takıldı (5 sn'de bir dosya); birkaç saniye sonra tekrar deneyin.] Adalet ve Seçim — İl Genel Meclisi Üyeleri Seçimi Sonuçları (1963-1977)
-- [error/PortalError: TÜİK portalı indirme hız sınırına takıldı (5 sn'de bir dosya); birkaç saniye sonra tekrar deneyin.] Adalet ve Seçim — Mahalli İdareler Seçimine Katılan Siyasi Partilerin ve Bağımsızların Aldıkları Oy Sayısı Ve Oranı 
-- [error/PortalError: TÜİK portalı indirme hız sınırına takıldı (5 sn'de bir dosya); birkaç saniye sonra tekrar deneyin.] Adalet ve Seçim — Siyasi Parti ve Bağımsızların Kazandıkları Milletvekili Sayısı
-- [error/PortalError: TÜİK portalı indirme hız sınırına takıldı (5 sn'de bir dosya); birkaç saniye sonra tekrar deneyin.] Adalet ve Seçim — Seçim Yılına Göre Kayıtlı Seçmen ve Oy Kullanan Seçmen Sayısı
-- [error/PortalError: TÜİK portalı indirme hız sınırına takıldı (5 sn'de bir dosya); birkaç saniye sonra tekrar deneyin.] Adalet ve Seçim — İl Genel Meclisi Üyeleri Seçimi Sonuçları (2014)
+| Neden | Adet |
+| --- | ---: |
+| labels do not tell values apart (…) | 57 |
+| no sheet holds numeric data | 13 |
+
+## Dosya türleri
+
+| Tür | Adet |
+| --- | ---: |
+| xls | 1693 |
+| xlsx | 7 |
+
+## İndirilemeyenler
+
+- Fiyat İstatistikleri — Üretici Fiyat Endeksi- NACE Rev.2 Kodlarının Eski Serilerdeki Karşılıkları: PortalError: TÜİK portalı 180 sn içinde dosyayı göndermedi.
+- İstihdam, İşsizlik ve Ücret — Ekonomik Faaliyete Göre İş Kazası Geçiren veya İşe Bağlı Sağlık Sorununa Maruz Kalanlar: PortalError: TÜİK portalı 180 sn içinde dosyayı göndermedi.
+- İstihdam, İşsizlik ve Ücret — Kendi hesabına veya işveren olarak çalışanların çalışmaya başlama nedeni: PortalError: TÜİK portalı 180 sn içinde dosyayı göndermedi.
+- Nüfus ve Demografi — İl ve cinsiyete göre ortalama evlenme yaşı: PortalError: TÜİK portalı 180 sn içinde dosyayı göndermedi.
+
+## Kapsam
+
+Katalogdaki 1.746 istab bağlantısının **1.700**'ü diskte ölçüldü; kalan 46 dosya indirme
+iş sahibinin isteğiyle durdurulduğu için **indirilmedi** (ölçüme dahil değil). Ölçüm
+`tidy_istab`'ı çevrimdışı çalıştırır; canlı aracın aynı kodu kullanır.
+
+## Önceki sürümle (v0.35, git HEAD) karşılaştırma — aynı 1.700 dosya
+
+| Sonuç | Önceki (tümü) | Yeni (tümü) | Önceki tasarım / ayrılmış | Yeni tasarım / ayrılmış |
+| --- | ---: | ---: | ---: | ---: |
+| yüksek | 906 | 459 | 769 / 137 | 394 / 65 |
+| orta | 758 | 1.152 | 654 / 104 | 985 / 167 |
+| kısmi | — | 19 | — | 15 / 4 |
+| reddedildi | 36 | 70 | 29 / 7 | 58 / 12 |
+
+"yüksek" artık daha dar ve anlamlı: yalnızca düz ızgara (en fazla 2 başlık satırı,
+bölüm hiyerarşisi/varsayım yok, dönem tablonun içinden). Çıkarımla kurulan her yapı
+`orta`dır ve `yapi_cikarimi` alanında listelenir.
+
+Değer düzeyinde (tasarım kümesi, iki sürümün de çevirdiği 1.384 dosya): 1.226 dosyada
+değer kümesi aynı; 18 dosyada yalnızca yeni değer eklendi; 118 dosyada bazı değerler artık
+verilmiyor — bunlar önceki sürümün veri sandığı başlık yılları, sütun/satır numaraları,
+kod sütunları (CPA/ISCO/NACE), yıl bölüm satırları, dipnot satırları ve artık raporlanan
+atlamalar (başlıksız sütun, kaynakta iki kez yazılmış satır). Ayrıca tüm sayfalar için
+denetlendi: değer satırı × değer sütunundaki her sayı ya çıktıda ya da `atlananlar`'da.
+Önceki sürümün çevirip yenisinin reddettiği 49 (+ayrılmış 9) dosyanın 47'si (+9) önceki
+sürümde zaten **aynı etiketle iki farklı sayı** veriyordu (sessiz belirsizlik); kalan 2'si
+sayısal veri içermeyen madde/kod listesidir (önceki sürüm kodları değer sanıyordu).
+
+## Bağımsız değer izleme (value trace)
+
+Dosya başına 4 rastgele çıktı değeri, ham dosyada (xlrd/openpyxl, birleştirilmiş hücreler
+dahil; dönüştürücünün kodu kullanılmadan) kaynak hücresine kadar izlendi; her etiketin o
+hücrenin satır/sütun/başlık bağlamında bulunması ve etiketlerin hücreyi tek başına
+belirlemesi denetlendi.
+
+| | Önceki sürüm | Yeni sürüm |
+| --- | ---: | ---: |
+| Tasarım: tam doğrulanan | 4.483 / 5.682 (%78,9) | 4.874 / 5.569 (%87,5) |
+| Ayrılmış: tam doğrulanan | 772 / 960 (%80,4) | 817 / 943 (%86,6) |
+| Tasarım: aynı etiket bağlamı birden çok farklı sayıyı kapsıyor | 846 | 323 |
+
+Yeni sürümde doğrulanamayan değerlerin dökümü (tasarım 695, ayrılmış 126): kanıtlanmış
+açıklamalar — kaynak satır gösterilerek doğrulanmış başlık/blok etiketi (107), toplam/üst
+satır ya da başlıksız ilk blok olarak ayrışan (247+42), beyan edilen birim/TR-EN/sarılı
+etiket birleştirmeleri (44+2), tek başlıksız değer sütunu yer tutucusu (43+11), izleyicinin
+bilinen sınırları (sayı başlığı satırdaki veriyle eşleşiyor; matrisin iki ekseninde aynı adlar;
+veri olmayan rakip hücre) (39+16), önceki yöntemle okunan sayfalar (49+18, `orta`, etiketleri
+doğrulanmadı). **Açıklanamayan kalan: tasarım 167, ayrılmış 26 değer** (başlık kapsamı/yakın
+başlık atlanmış olabilir, etiket kaynakta bulunamadı vb.); bunların **hiçbiri `yüksek`
+dosyada değil** — hepsi `orta`/`kısmi` olarak ve `yapi_cikarimi` notuyla döner.

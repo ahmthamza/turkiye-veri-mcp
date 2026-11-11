@@ -501,10 +501,13 @@ def test_tidy_year_month_stub_is_not_a_value():
         [None, 2, 61.0],
     ]
     frame, report = tidy.tidy_istab(_xls_bytes(rows))
-    assert list(frame.columns) == ["Yıl\nYear", "Ay\nMonth", "gosterge", "deger"]
+    # Yıl and Ay stay as they are; 'donem' (added) combines them.
+    assert list(frame.columns) == ["Yıl\nYear", "Ay\nMonth", "donem", "gosterge", "deger"]
     assert frame["deger"].tolist() == [57.4, 57.3, 67.9, 60.1, 61.0]
     assert frame["Yıl\nYear"].tolist() == [2010, 2010, 2010, 2011, 2011]
+    assert frame["donem"].tolist() == ["2010-01", "2010-02", "2010-03", "2011-01", "2011-02"]
     assert report["tidy_confidence"] == "yüksek"
+    assert report["donem_kaynagi"] == {"Sheet": "tablo"}
 
 
 def test_tidy_crosstab_period_headers():
@@ -533,6 +536,362 @@ def test_tidy_rejects_non_spreadsheets():
         tidy.tidy_istab(b"%PDF-1.7 ...")
     with pytest.raises(tidy.TidyError, match="HTML"):
         tidy.tidy_istab(b"<!DOCTYPE html><html></html>")
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", "<w/>")
+    with pytest.raises(tidy.TidyError, match="DOCX"):
+        tidy.tidy_istab(buf.getvalue())
+
+
+# ------------------------------------------------- istab layouts (synthetic)
+
+
+def _book(rows: list[list], merges: tuple[str, ...] = (), indent: dict | None = None,
+          title: str = "Sheet") -> bytes:
+    """Tiny xlsx: rows, merged ranges ('A1:C1') and Excel indent levels {(row, col): n} (0-based)."""
+    from openpyxl.styles import Alignment
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = title
+    for row in rows:
+        ws.append(row)
+    for rng in merges:
+        ws.merge_cells(rng)
+    for (r, c), level in (indent or {}).items():
+        ws.cell(row=r + 1, column=c + 1).alignment = Alignment(indent=level)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _value(frame: pd.DataFrame, **labels) -> float:
+    sel = frame
+    for column, value in labels.items():
+        sel = sel[sel[column] == value]
+    assert len(sel) == 1, (labels, sel)
+    return float(sel["deger"].iloc[0])
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [("2006 (Ekim-Kasım)", None), ("-(1)", None), ("12 (r)", 12), ("1 234 567", "1234567")],
+)
+def test_clean_number_never_reads_a_worded_header(raw, expected):
+    got = tidy._clean_number(raw)
+    assert (got if got is None else float(got)) == (expected if expected is None else float(expected))
+
+
+@pytest.mark.parametrize(
+    "text,periods,has_range",
+    [
+        ("Nüfus, 2023", ["2023"], False),
+        ("Tablo, 2015-2024", [], True),
+        ("Endeks (2003=100), 2020", ["2020"], False),
+        ("Yurt içi ÜFE, 2003=100, CPA 2008", [], False),
+        ("Hanehalkı tüketimi (1998 Fiyatlarıyla)", [], False),
+        ("Gençler, Ekim-Aralık 2019", ["2019 Ekim-Aralik"], False),
+        ("2023 yılı I. Çeyrek", ["2023-Q1"], False),
+        ("31.12.2023 tarihi itibarıyla", ["2023-12-31"], False),
+        ("Sağlık harcamaları, 2022, 2025", ["2022", "2025"], False),
+        ("2013/'14 öğretim yılı", ["2013/2014"], False),
+    ],
+)
+def test_periods_in_title_text(text, periods, has_range):
+    assert tidy.periods_in_text(text) == (periods, has_range)
+
+
+def test_period_section_rows_become_donem():
+    rows = [
+        ["Suç türüne göre hükümlüler", None, None],
+        [None, None, None],
+        ["Suç türü", "Erkek", "Kadın"],
+        [2020, None, None],
+        ["Hırsızlık - Theft", 10, 2],
+        ["Yağma - Robbery", 5, 1],
+        [2019, None, None],
+        ["Hırsızlık - Theft", 11, 3],
+        ["Yağma - Robbery", 6, 0],
+    ]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert _value(frame, donem="2019", gosterge="Erkek", **{"Suç türü": "Hırsızlık - Theft"}) == 11
+    assert report["tidy_confidence"] == "yüksek"
+
+
+def test_wrapped_label_is_not_a_section_heading():
+    # 'Kişiyi hürriyetinden yoksun kılma -' / 'Kidnapping' is one label split over
+    # two lines; it must not become a heading for the rows below it.
+    rows = [
+        ["Suç türü", "Toplam"],
+        ["Öldürme - Homicide", 5],
+        ["Kişiyi hürriyetinden yoksun kılma -", None],
+        ["Kidnapping", 7],
+        ["Hırsızlık - Theft", 9],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert "bolum" not in frame.columns
+    labels = frame["Suç türü"].tolist()
+    assert labels == ["Öldürme - Homicide", "Kişiyi hürriyetinden yoksun kılma - Kidnapping", "Hırsızlık - Theft"]
+
+
+def test_tr_en_labels_on_consecutive_rows_form_one_series():
+    rows = [
+        ["Eğitim", "Ölçü", 2016, 2017],
+        ["Toplam", "Sayı-HC", 1388, 1564],
+        ["Total", "TZE-FTE", 1150.5, 1287.8],
+        ["Doktora", "Sayı-HC", 274, 308],
+        ["Doctoral level", "TZE-FTE", 222.7, 247.4],
+        ["Lisans", "Sayı-HC", 490, 531],
+        ["Bachelor level", "TZE-FTE", 393.7, 421.0],
+    ]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert set(frame["Eğitim"]) == {"Toplam", "Doktora", "Lisans"}
+    assert _value(frame, Eğitim="Doktora", Ölçü="TZE-FTE", donem="2017") == 247.4
+    assert set(frame["Eğitim_en"]) == {"Total", "Doctoral level", "Bachelor level"}
+    assert "varsayimlar" in report
+
+
+def test_block_title_in_value_area_replaces_header_title():
+    # CPI layout: 'Endeks' block, then 'Aylık değişim (%)' block with the same rows.
+    rows = [
+        ["Yıl", "Ocak", "Şubat"],
+        [None, "Endeks - Index", None],
+        [2005, 100.0, 101.0],
+        [2006, 110.0, 111.0],
+        [None, "Aylık değişim (%)", None],
+        [2005, 1.5, 1.0],
+        [2006, 2.5, 0.9],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows, merges=("B2:C2", "B5:C5")))
+    assert _value(frame, donem="2006", gosterge="Ocak — Aylık değişim (%)") == 2.5
+    assert _value(frame, donem="2006", gosterge="Ocak — Endeks - Index") == 110.0
+
+
+def test_indented_groups_under_block_titles():
+    # Two population blocks repeat the same groups; the block title must stay.
+    rows = [
+        [None, "Evli", "Bekar"],
+        ["Engelli nüfus", None, None],
+        ["Türkiye", 54.1, 34.4],
+        ["Cinsiyet", None, None],
+        ["Erkek", 60.9, 34.7],
+        ["Kadın", 44.5, 34.0],
+        ["Süreğen hastalığı olan nüfus", None, None],
+        ["Türkiye", 76.7, 7.4],
+        ["Cinsiyet", None, None],
+        ["Erkek", 80.1, 9.6],
+        ["Kadın", 73.0, 6.0],
+    ]
+    indent = {(4, 0): 1, (5, 0): 1, (9, 0): 1, (10, 0): 1}
+    frame, _ = tidy.tidy_istab(_book(rows, merges=("A2:C2", "A7:C7"), indent=indent))
+    erkek = frame[(frame["kolon_1"] == "Erkek") & (frame["gosterge"] == "Evli")]
+    assert dict(zip(erkek["bolum"], erkek["deger"])) == {
+        "Engelli nüfus > Cinsiyet": 60.9,
+        "Süreğen hastalığı olan nüfus > Cinsiyet": 80.1,
+    }
+
+
+def test_lost_dimension_is_refused_not_returned():
+    # Two blocks with identical row labels and nothing telling them apart.
+    rows = [
+        ["Bölge", "Değer"],
+        ["Kent", 1.0],
+        ["Kır", 2.0],
+        [None, None],
+        ["Kent", 3.0],
+        ["Kır", 4.0],
+        ["Toplam", 10.0],
+    ]
+    with pytest.raises(tidy.TidyError, match="do not tell values apart"):
+        tidy.tidy_istab(_book(rows))
+
+
+def test_source_row_printed_twice_is_dropped_and_reported():
+    rows = [["Ürün", "Endeks"]] + [[f"Ürün {i}", float(i)] for i in range(1, 150)]
+    rows[30] = ["Ürün 29", 99.0]          # same label as row 29, different number
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert report["tidy_confidence"] == "kısmi"
+    assert "aynı etiketle" in report["atlananlar"]["Sheet"][0]
+    assert "Ürün 29" not in set(frame["Ürün"])
+
+
+def test_heading_cycle_total_rows_label_their_block():
+    rows = [
+        [None, "Toplam", "Yük getirdi"],
+        ["Muayene", 100, 7.3],
+        ["Cinsiyet", None, None],
+        ["Erkek", 100, 7.0],
+        ["Kadın", 100, 7.5],
+        ["Yaş", None, None],
+        ["15-24", 100, 7.6],
+        ["İlaç", 100, 5.5],
+        ["Cinsiyet", None, None],
+        ["Erkek", 100, 5.3],
+        ["Kadın", 100, 5.6],
+        ["Yaş", None, None],
+        ["15-24", 100, 6.1],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    ilac = frame[(frame["kolon_1"] == "İlaç") & (frame["gosterge"] == "Yük getirdi")]
+    assert ilac["bolum"].isna().all()           # not under 'Yaş'
+    assert _value(frame, kolon_1="Erkek", bolum="İlaç > Cinsiyet", gosterge="Yük getirdi") == 5.3
+
+
+def test_side_by_side_tables_take_their_own_labels():
+    rows = [
+        ["Yıllar", "Hekim", "Hemşire", None, "Yıllar", "Hekim", "Hemşire"],
+        [1928, 12841, 106485, None, 1977, 23000, 9000],
+        [1929, 12971, 86207, None, 1978, 24000, 9500],
+    ]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert _value(frame, donem="1977", gosterge="Hekim") == 23000
+    assert _value(frame, donem="1928", gosterge="Hekim") == 12841
+    assert any("yan yana" in a for a in report["varsayimlar"]["Sheet"])
+
+
+def test_percent_columns_after_year_columns_get_that_year():
+    rows = [
+        ["Faaliyet türü", 2005, "(%)", 2006, "(%)", 2007, "(%)"],
+        ["Toplam", 44100098, 100, 50817084, 100, 48843768, 100],
+        ["Fuar", 2800523, 6.35, 3132661, 6.16, 3835146, 7.85],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert _value(frame, **{"Faaliyet türü": "Fuar"}, donem="2006", gosterge="(%)") == 6.16
+    assert frame["Faaliyet türü"].map(lambda v: isinstance(v, str)).all()
+
+
+def test_repeated_unit_headers_are_qualified_by_their_measure():
+    rows = [
+        [None, "Seçmen sayısı", "Oy kullanan", "(%)", "Geçerli oy", "(%)"],
+        ["Türkiye", 64197454, 54023601, 84.2, 53339313, 98.7],
+        ["Yurt dışı", 3426218, 1930226, 56.3, 1920757, 99.5],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert _value(frame, kolon_1="Yurt dışı", gosterge="Geçerli oy — (%)") == 99.5
+    assert _value(frame, kolon_1="Yurt dışı", gosterge="Oy kullanan — (%)") == 56.3
+
+
+def test_code_column_left_of_names_is_a_label():
+    rows = [
+        ["Meslek grubu", None, "Kazanç", "Temel ücret (%)"],
+        ["Toplam - Total", None, 14251.8, 82.0],
+        [1, "Kanun yapıcılar", 35914, 82.7],
+        [11, "Kanun yapıcılar ve üst düzey", 27609, 89.4],
+        [112, "Üst düzey devlet memurları", "(0)", "(0)"],
+        [12, "Şirket müdürleri", 37027, 82.9],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows, merges=("A1:B1",)))
+    assert 112.0 not in set(frame["deger"]) and 11.0 not in set(frame["deger"])
+    assert sorted(frame["deger"]) == sorted([14251.8, 82.0, 35914, 82.7, 27609, 89.4, 37027, 82.9])
+
+
+def test_marker_with_footnote_keeps_a_year_column_numeric():
+    rows = [
+        [None, 2006, 2007, 2008, 2009],
+        ["Sürekli yoksulluk oranı", "-(1)", "-(1)", 17.3, 18.5],
+        ["Maddi yoksunluk oranı", 60.4, 58.8, 57.7, 56.7],
+        ["Maddi ve sosyal yoksunluk", "-(2)", "-(2)", "-(2)", "-(2)"],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert _value(frame, kolon_1="Maddi yoksunluk oranı", donem="2006") == 60.4
+    assert len(frame) == 6
+    assert set(frame.columns) <= {"kolon_1", "donem", "deger"}
+
+
+def test_code_header_row_is_not_data():
+    rows = [
+        ["Fiyat endeksi", None, None, None],
+        ["CPA", "05", "05.1", "10", "10.1"][:4],
+        ["Yıl", "Madencilik", "Kömür", "Gıda"],
+        [2003, 91.5, 92.0, 93.1],
+        [2004, 95.2, 96.0, 97.3],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert sorted(frame["deger"]) == sorted([91.5, 92.0, 93.1, 95.2, 96.0, 97.3])
+    assert 10.0 not in set(frame["deger"])
+
+
+def test_source_line_with_a_number_is_not_data():
+    rows = [
+        ["Yıl", "Göç"],
+        [2024, 2513950],
+        [2025, 2314447],
+        ["TÜİK, İç Göç İstatistikleri, 2025", 1],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert sorted(frame["deger"]) == [2314447, 2513950]
+
+
+def test_quarter_rows_closed_by_a_year_row():
+    rows = [
+        ["Çeyrek", "Tarım", "Sanayi"],
+        ["1.çeyrek-quarter", 36.1, 27.2],
+        ["2.çeyrek-quarter", 28.0, 28.7],
+        [1999, 25.4, 24.3],
+        [None, None, None],
+        ["1.çeyrek-quarter", 57.3, 36.1],
+        ["2.çeyrek-quarter", 45.2, 39.4],
+        [2000, 53.8, 31.3],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert _value(frame, donem="2000-Q2", gosterge="Tarım") == 45.2
+    assert _value(frame, donem="1999", gosterge="Sanayi") == 24.3
+
+
+def test_group_header_fill_needs_the_same_sub_header_shape():
+    # No merged cells: 'Büyüme hızı' sits over its own column only; the next
+    # column is a sector ('Tarım') whose label is two rows lower.
+    rows = [
+        [None, None, "Sektör", "Büyüme", None, "Sektör"],
+        [None, None, "payı", "hızı", None, "payı"],
+        ["Yıl", "GSMH", "%", "%", "Tarım", "%"],
+        [1968, 163892.7, 100, None, 65151.1, 39.75],
+        [1969, 183356.2, 100, 11.88, 71205.8, 38.83],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    tarim = frame[frame["deger"] == 65151.1]["gosterge"].iloc[0]
+    assert "Büyüme" not in tarim and "Tarım" in tarim
+
+
+def test_counts_that_look_like_years_stay_values():
+    rows = [
+        ["İBBS", None, "Toplam", "Erkek", "Kadın"],
+        ["TR333", "Kütahya", 8617, 8617, "-"],
+        ["TR334", "Uşak", 1925, 1925, "-"],
+        ["TR411", "Bursa", 20924, 20924, "-"],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows, merges=("A1:B1",)))
+    assert _value(frame, **{"İBBS_2": "Uşak"}, gosterge="Erkek") == 1925
+
+
+def test_period_from_title_has_provenance_and_range_title_does_not():
+    rows = [["Medeni duruma göre engelli nüfus oranı, 2002"], [None, None],
+            [None, "Evli", "Bekar"], ["Türkiye", 54.1, 34.4], ["Kent", 55.2, 33.1]]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert set(frame["donem"]) == {"2002"} and set(frame["donem_kaynak"]) == {"başlık"}
+    assert report["tidy_confidence"] == "orta" and report["donem_kaynagi"]["Sheet"] == "başlık"
+    rows[0] = ["Medeni duruma göre engelli nüfus oranı, 2002-2010"]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert "donem" not in frame.columns
+    assert report["donem_kaynagi"]["Sheet"].startswith("yok")
+    # catalog name is used only when the sheet itself names no period
+    rows[0] = ["Medeni duruma göre engelli nüfus oranı"]
+    frame, report = tidy.tidy_istab(_book(rows), meta={"name": "Engelli nüfus, 2002", "path": "Sağlık"})
+    assert set(frame["donem_kaynak"]) == {"katalog adı"}
+
+
+def test_unlabeled_zero_column_is_ignored_and_reported():
+    rows = [
+        ["Ad", "Değer", None],
+        ["A", 1.5, 0],
+        ["B", 2.5, 0],
+        ["C", 3.5, 0],
+    ]
+    frame, report = tidy.tidy_istab(_book(rows))
+    assert sorted(frame["deger"]) == [1.5, 2.5, 3.5]
+    assert any("başlıksız" in a for a in report["varsayimlar"]["Sheet"])
 
 
 # ---------------------------------------------------------------- live
@@ -604,6 +963,72 @@ def test_live_istab_download_and_tidy():
     assert rows
     got = portal.download_file(rows[0]["url"])
     assert got.kind in ("xls", "zip/xlsx")
-    frame, report = tidy.tidy_istab(got.content)
+    frame, report = tidy.tidy_istab(got.content, meta={"name": rows[0]["name"], "path": rows[0]["path"]})
     assert len(frame) > 0 and "deger" in frame.columns
     assert report["tidy_confidence"] in ("yüksek", "orta", "kısmi")
+    assert set(report["donem_kaynagi"]) == set(report["sheet_notes"])
+    keys = [c for c in frame.columns if c != "deger"]
+    assert not frame.duplicated(subset=keys).any()      # labels identify every value
+
+
+def test_glued_tr_en_heading_is_not_merged_into_the_next_label():
+    # 'Öğrenim durumu-Educational status' is a group heading, not the first line
+    # of 'Bir okul bitirmedi-No school completed'; the age heading must not go stale.
+    rows = [
+        [None, "Katılıyor"],
+        ["Türkiye-Türkiye", 43.1],
+        ["Yaş grubu-Age group", None],
+        ["15-24", 45.1],
+        ["25-34", 39.0],
+        ["Öğrenim durumu-Educational status", None],
+        ["Bir okul bitirmedi-No school completed", 48.8],
+        ["Lise-High school", 39.7],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    lise = frame[frame["kolon_1"] == "Lise-High school"]
+    assert lise["bolum"].tolist() == ["Öğrenim durumu-Educational status"]
+    assert "Bir okul bitirmedi-No school completed" in set(frame["kolon_1"])
+
+
+def test_en_lines_without_numbers_belong_to_the_row_above():
+    rows = [
+        [None, "Erkek", "Kadın"],
+        ["Yemek yapma", 2, 87.1],
+        ["Cooking", None, None],
+        ["Ütü", 2.2, 84.3],
+        ["Ironing", None, None],
+        ["Günlük yiyecek-içecek alışverişi", 33.3, 37.7],
+        ["Daily shopping", None, None],
+        ["Aylık faturaların ödenmesi", 69.1, 17],
+        ["Payment of monthly bills", None, None],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert "bolum" not in frame.columns
+    assert _value(frame, kolon_1="Ütü", kolon_1_en="Ironing", gosterge="Kadın") == 84.3
+
+
+def test_alternating_en_lines_are_labels_not_headings():
+    rows = [
+        [None, "Erkek", "Kadın"],
+        ["Çocuk babanın hayatını olumsuz etkiler", 21.9, 21.2],
+        ["Children negatively affect the father", None, None],
+        ["Erkek çocuk annenin itibarını artırır", 32.6, 31.3],
+        ["Sons increase the prestige of the mother", None, None],
+        ["Soyun devamını erkek çocuk sağlar", 44.6, 36.4],
+        ["Son keeps the race up", None, None],
+        ["Çocuk eşleri birbirine yaklaştırır", 86.9, 85.0],
+        ["Children bring the spouses closer", None, None],
+    ]
+    frame, _ = tidy.tidy_istab(_book(rows))
+    assert "bolum" not in frame.columns
+    assert _value(frame, kolon_1="Soyun devamını erkek çocuk sağlar", gosterge="Erkek") == 44.6
+    assert set(frame["kolon_1_en"]) >= {"Son keeps the race up", "Sons increase the prestige of the mother"}
+
+
+def test_inferred_structure_is_never_yuksek():
+    rows = [[None, "Değer"], ["Cinsiyet", None], ["Erkek", 1.0], ["Kadın", 2.0],
+            ["Yaş", None], ["15-24", 3.0], ["25-34", 4.0]]
+    frame, report = tidy.tidy_istab(_book(rows), meta={"name": "Tablo, 2020"})
+    assert "bolum" in frame.columns
+    assert report["tidy_confidence"] == "orta"
+    assert "bolum" in report["yapi_cikarimi"]["Sheet"][0]

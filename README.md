@@ -235,7 +235,7 @@ MIT
 ## Bilinen sınırlar
 
 - **TÜİK:** katalogdaki 515 veri akışının 508'i canlı doğrulandı; `DF_UGOC_T1`–`T6` ve `T8` için TÜİK sunucusunda veri yok. Önizleme 300 bin, indirme 2 milyon gözlemle sınırlı.
-- **TÜİK istab tidy'leme best-effort'tur.** Bağımsız 134 dosyalık örneklemde 131 tablo dönüştürüldü (80 yüksek, 51 orta güven), 3'ü açık hatayla reddedildi. "orta" = tabloda dönem bilgisi yok, başlığa bakın. TR/EN etiketlerin alt alta yazıldığı tablolarda bir seri iki etiketle bölünebilir; bazı değer sütunları etiket sanılıp atlanabilir (veri eksik kalır, yanlış olmaz). Ham dosya her zaman `tuik_download_table_file` ile alınabilir.
+- **TÜİK istab tidy'leme best-effort'tur.** Katalogdaki 1.746 tablonun indirilen 1.700'ünde ölçüldü: 459 yüksek, 1.152 orta, 19 kısmi güvenle çevrildi; 70'i (aynı etiketle iki farklı sayı veren 57 tablo, sayısal verisi olmayan 13 dosya) açık hatayla reddedildi. "yüksek" yalnızca yapısı tablonun kendisinden kurulan düz tablolar içindir; "orta" tablolarda yapı ya da dönem çıkarımla kurulmuştur ve neyin varsayıldığı `yapi_cikarimi`/`varsayimlar` alanlarında yazar. Kaynak hücreye kadar izlenen değerlerin %87'si tam doğrulandı; kalanlar yalnızca orta/kısmi tablolarda ve notla döner. 46 tablo ölçülmedi. Ham dosya her zaman `tuik_download_table_file` ile alınabilir.
 - **MEDAS/Biruni veritabanları (100 kayıt) yalnızca bağlantı olarak listelenir:** durum tutan bir web arayüzü, veri API'si yok.
 - **TÜİK mikroverisi kapsam dışıdır** (kurumsal başvuruyla dağıtılır).
 - **EVDS:** sunucu tarafı seri araması ve "son N gözlem" ucu yoktur; ikisi de istemci tarafında yapılır. `evds_search_series` dizini ilk kullanımda arka planda kurulur (yaklaşık 8 dakika), 7 günde bir yenilenir; dizin hazır değilken eşleşen veri grupları döner.

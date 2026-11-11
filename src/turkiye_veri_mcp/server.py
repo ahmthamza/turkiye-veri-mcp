@@ -493,16 +493,34 @@ def tuik_download_table_file(url: str, output_path: str) -> str:
 def tuik_get_table_data(url: str, output_path: str = "", max_rows: int = 50) -> str:
     """Download an 'istab' Excel table and convert it to tidy long format.
 
-    Handles TUIK's common layouts (title/footnote rows, year-per-sheet
-    workbooks, crosstabs with period headers, Yıl/Ay stub columns with
-    merged cells). Output columns: the table's own label columns (kept
-    verbatim), 'donem' when a single period column/header exists, 'gosterge'
-    (the value column's header) and 'deger'. tidy_confidence: 'yüksek'
-    (all sheets, with periods), 'orta' (all sheets, some without a period:
-    check the title), 'kısmi' (some sheets failed). Layouts the parser cannot
-    read safely are refused with an error rather than guessed (ambiguous
-    '1.234' text cells are dropped, not guessed); tuik_download_table_file
-    always gets you the raw file.
+    The sheet is split into title lines, header rows (multi-row, merged
+    cells, TR+EN lines), label columns and body rows (headings, period rows
+    such as '2020', labels wrapped over two lines, TR/EN label pairs, repeated
+    header blocks, side-by-side tables, footnotes) before unpivoting.
+
+    Output columns: the table's label columns (kept verbatim; '<name>_en'
+    when TR and EN labels are on consecutive rows), 'bolum' (heading rows
+    above the value, outermost first, joined with ' > '), 'donem' (period, as
+    text), 'donem_kaynak' (only when the period is NOT in the table grid:
+    'başlık', 'sayfa adı', 'katalog adı' or 'katalog yolu'), 'gosterge' (the
+    value column's header) and 'deger'; 'sayfa' for multi-sheet files.
+
+    tidy_confidence -- what you can rely on:
+      'yüksek': every data sheet read from a plain grid: labels straight from
+                header cells and label columns, period from the table itself.
+      'orta':   every data sheet read, but the period was taken from the title /
+                sheet name / catalog entry ('donem_kaynagi'), or none could be
+                established ('yok (...)', e.g. the title names 2015-2024), or
+                the structure was inferred -- heading hierarchy in 'bolum',
+                repeated header blocks, TR/EN merges -- listed in
+                'yapi_cikarimi'; check those labels before relying on them.
+      'kısmi':  some sheets, rows or columns were skipped; they are listed in
+                'sheet_failures' and 'atlananlar'.
+    'varsayimlar' lists every interpretation made (e.g. TR/EN rows merged,
+    '(%)' columns tied to the year on their left). Layouts that cannot be
+    read safely are refused with an error -- including tables whose labels
+    would give two different numbers the same key -- rather than guessed;
+    tuik_download_table_file always gets you the raw file.
 
     Args:
         url: The url field of an istab row from tuik_list_tables/tuik_search_tables.
@@ -512,21 +530,43 @@ def tuik_get_table_data(url: str, output_path: str = "", max_rows: int = 50) -> 
     from turkiye_veri_mcp.portal import download_file
 
     downloaded = download_file(url)
+    # Catalog name/path: used only to recover a single reference period that
+    # the sheet itself does not state (reported as donem_kaynak).
+    meta = None
     try:
-        frame, report = tidy_istab(downloaded.content)
+        wanted = url.strip()
+        for theme in _portal.list_themes():
+            for row in _portal.list_resources(theme["theme_id"], types=("istab",)):
+                if row["url"] == wanted:
+                    meta = {"name": row["name"], "path": row["path"], "theme": row["theme_name"]}
+                    break
+            if meta:
+                break
+    except Exception:  # noqa: BLE001 -- the catalog is a hint only
+        meta = None
+    try:
+        frame, report = tidy_istab(downloaded.content, meta=meta)
     except TidyError as exc:
         return _json(
             {
                 "error": str(exc),
-                "hint": "Bu tablo bilinen şablonlara uymuyor; ham dosya için "
-                        "tuik_download_table_file kullanın.",
+                "hint": "Bu tablo güvenle okunamadı (yanlış sayı döndürmek yerine "
+                        "reddedildi); ham dosya için tuik_download_table_file kullanın.",
             }
         )
-    for field in ("sheet_notes", "sheet_failures"):
+    for field in ("sheet_notes", "sheet_failures", "donem_kaynagi", "varsayimlar", "atlananlar",
+                  "yapi_cikarimi"):
         items = report.get(field) or {}
         if len(items) > 20:
             report[field] = dict(list(items.items())[:20])
             report[f"{field}_truncated"] = len(items)
+    explanation = {
+        "yüksek": "Yapı ve dönem tablonun kendisinden okundu.",
+        "orta": "Tüm sayfalar okundu; ancak dönem tablonun içinde değil ('donem_kaynagi') "
+                "ya da yapı çıkarımla kuruldu ('yapi_cikarimi': bölüm hiyerarşisi, "
+                "tekrarlanan başlık blokları, TR/EN birleştirme) -- bu etiketleri kontrol edin.",
+        "kısmi": "Bazı sayfa/satır/sütunlar atlandı; 'sheet_failures' ve 'atlananlar' listeler.",
+    }
     preview = frame.head(max(0, max_rows)).to_csv(index=False)
     if len(preview) > 12000:
         preview = preview[:12000] + "\n... (kırpıldı; tamamı için output_path verin)"
@@ -534,6 +574,7 @@ def tuik_get_table_data(url: str, output_path: str = "", max_rows: int = 50) -> 
         "n_rows": int(frame.shape[0]),
         "columns": list(frame.columns),
         **report,
+        "tidy_confidence_aciklama": explanation.get(report.get("tidy_confidence"), ""),
         "source_filename": downloaded.filename,
         "preview_csv": preview,
     }

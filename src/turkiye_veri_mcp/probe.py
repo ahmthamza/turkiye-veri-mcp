@@ -4,7 +4,9 @@ The coverage audit counts istab tables; this probe opens a sample of them and
 classifies their structure, so the "how much of the remaining 78.8% can we
 actually tidy?" question is answered with measurements, not guesses.
 
-    turkiye-veri-probe --per-theme 8        # writes ISTAB_PROBE.md
+    turkiye-veri-probe --per-theme 8        # writes ISTAB_PROBE.md (live sample)
+    turkiye-veri-probe --local manifest.jsonl --append extra.md
+                                            # full local corpus, offline
 
 Classes:
   clean        single sheet, one header row -> parses today, no custom code
@@ -242,13 +244,158 @@ def render(probe_result: dict) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Offline measurement of a downloaded corpus
+# ---------------------------------------------------------------------------
+
+
+def is_holdout(url: str, salt: str = "holdout-v1", share: int = 15) -> bool:
+    """Deterministic held-out split (share % of urls), independent of content."""
+    import hashlib
+
+    digest = int(hashlib.md5((salt + ":" + url).encode()).hexdigest()[:8], 16)
+    return digest % 100 < share
+
+
+def _file_kind(content: bytes) -> str:
+    from turkiye_veri_mcp.tidy import _file_kind as kind
+
+    return kind(content)
+
+
+def _reason_class(reason: str) -> str:
+    import re
+
+    text = re.sub(r"^no sheet could be tidied: ", "", reason)
+    text = re.sub(r"^[^:]{1,40}: ", "", text)
+    text = text.split(";")[0]
+    text = re.sub(r"'[^']*'", "'…'", text)
+    text = re.sub(r"\(\d+ label sets carry different numbers, e\.g\. \[.*", "(…)", text, flags=re.S)
+    return text.strip()[:120]
+
+
+def measure_local(manifest: str) -> dict:
+    """Run tidy_istab over every downloaded file listed in a JSONL manifest."""
+    import json
+    import os
+    import warnings
+
+    warnings.simplefilter("ignore")
+    base = os.path.dirname(os.path.abspath(manifest))
+    records: dict[str, dict] = {}
+    failed: dict[str, dict] = {}
+    for line in open(manifest, encoding="utf-8"):
+        rec = json.loads(line)
+        if rec.get("ok"):
+            records[rec["url"]] = rec
+            failed.pop(rec["url"], None)
+        elif rec["url"] not in records:
+            failed[rec["url"]] = rec
+    results = []
+    for rec in records.values():
+        content = open(os.path.join(base, rec["file"]), "rb").read()
+        row = {
+            "theme": rec.get("theme"), "name": rec.get("name"), "url": rec["url"],
+            "holdout": is_holdout(rec["url"]), "kind": _file_kind(content),
+        }
+        try:
+            _, report = tidy_istab(content, meta={"name": rec.get("name"), "path": rec.get("path")})
+            row["outcome"] = report["tidy_confidence"]
+            row["sources"] = list(report.get("donem_kaynagi", {}).values())
+        except TidyError as exc:
+            row["outcome"] = "reddedildi"
+            row["reason"] = str(exc)
+        results.append(row)
+    return {"results": results, "failed": list(failed.values())}
+
+
+_LOCAL_ORDER = ["yüksek", "orta", "kısmi", "reddedildi"]
+
+
+def render_local(measured: dict, extra: str = "") -> str:
+    results = measured["results"]
+    failed = measured["failed"]
+    total = len(results)
+
+    def table(rows: list[dict]) -> list[str]:
+        counts = Counter(r["outcome"] for r in rows)
+        n = len(rows) or 1
+        return [f"| {k} | {counts[k]} | %{100 * counts[k] / n:.1f} |" for k in _LOCAL_ORDER]
+
+    design = [r for r in results if not r["holdout"]]
+    held = [r for r in results if r["holdout"]]
+    lines = [
+        f"# istab Ölçüm Raporu — turkiye-veri-mcp ({date.today().isoformat()})",
+        "",
+        f"Diskteki **{total}** istab dosyası `tidy_istab` ile çevrimdışı ölçüldü "
+        f"(indirme denemesi başarısız olan: {len(failed)}; katalogun geri kalanı için "
+        f"aşağıdaki 'Kapsam' bölümüne bakın).",
+        "",
+        "## Sonuç dağılımı",
+        "",
+        "| Sonuç | Adet | Pay |",
+        "| --- | ---: | ---: |",
+        *table(results),
+        "",
+        "Güven düzeyleri: **yüksek** = düz ızgara; etiketler doğrudan başlık hücrelerinden "
+        "(en fazla 2 başlık satırı), dönem tablonun içinden; **orta** = tüm sayfalar okundu "
+        "ama dönem başlık/sayfa adı/katalogdan alındı ya da bulunamadı (`donem_kaynagi`) "
+        "veya yapı çıkarımla kuruldu (`yapi_cikarimi`); **kısmi** = bazı sayfa/satır/"
+        "sütunlar atlandı (listelenir); **reddedildi** = güvenle okunamadı, sayı döndürülmedi.",
+        "",
+        "## Tasarım kümesi ve ayrılmış (held-out) küme",
+        "",
+        f"URL'nin özetine göre rastgele %15'lik bir küme ({len(held)} dosya) kurallar "
+        f"tasarlanırken hiç incelenmedi; sonuçlar ayrı raporlanır.",
+        "",
+        "| Sonuç | Tasarım | Ayrılmış |",
+        "| --- | ---: | ---: |",
+    ]
+    cd, ch = Counter(r["outcome"] for r in design), Counter(r["outcome"] for r in held)
+    for k in _LOCAL_ORDER:
+        lines.append(
+            f"| {k} | {cd[k]} (%{100 * cd[k] / max(1, len(design)):.1f}) | "
+            f"{ch[k]} (%{100 * ch[k] / max(1, len(held)):.1f}) |"
+        )
+    sources = Counter(s if not s.startswith("yok") else "yok" for r in results for s in r.get("sources", []))
+    lines += ["", "## Dönemin kaynağı (sayfa başına)", "", "| Kaynak | Sayfa |", "| --- | ---: |"]
+    for k, v in sources.most_common():
+        lines.append(f"| {k} | {v} |")
+    reasons = Counter(_reason_class(r["reason"]) for r in results if r["outcome"] == "reddedildi")
+    lines += ["", "## Ret nedenleri", "", "| Neden | Adet |", "| --- | ---: |"]
+    for k, v in reasons.most_common():
+        lines.append(f"| {k} | {v} |")
+    kinds = Counter(r["kind"] for r in results)
+    lines += ["", "## Dosya türleri", "", "| Tür | Adet |", "| --- | ---: |"]
+    for k, v in kinds.most_common():
+        lines.append(f"| {k} | {v} |")
+    if failed:
+        lines += ["", "## İndirilemeyenler", ""]
+        for rec in failed[:25]:
+            lines.append(f"- {rec.get('theme')} — {rec.get('name')}: {str(rec.get('err'))[:120]}")
+    if extra:
+        lines += ["", extra.strip()]
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="TÜİK istab parse edilebilirlik sondası")
     parser.add_argument("--per-theme", type=int, default=8)
     parser.add_argument("--out", default="ISTAB_PROBE.md")
     parser.add_argument("--lang", default="tr", choices=["tr", "en"])
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--local", default="", help="JSONL manifest of an already downloaded corpus")
+    parser.add_argument("--append", default="", help="markdown file appended to the report")
     args = parser.parse_args()
+
+    if args.local:
+        extra = open(args.append, encoding="utf-8").read() if args.append else ""
+        report = render_local(measure_local(args.local), extra)
+        with open(args.out, "w", encoding="utf-8") as handle:
+            handle.write(report)
+        print(f"Rapor yazıldı: {args.out}")
+        return
 
     print(f"istab örneklemi indiriliyor (tema başına {args.per_theme})...")
     result = probe(per_theme=args.per_theme, lang=args.lang, seed=args.seed)
