@@ -1323,7 +1323,7 @@ def hmb_list_files(klasor_id: int, klasor_adi: str) -> str:
     return _json({
         "n": len(files),
         "dosyalar": [{"etiket": f.etiket, "url": f.url, "uzanti": f.uzanti} for f in files],
-        "not": "Bir dosyayı tablo olarak almak için hmb_get_file(url=...).",
+        "not": "Bir dosyayı tablo olarak almak için hmb_get_file(url=..., etiket=..., klasor_id=..., klasor_adi=...).",
     })
 
 
@@ -1336,16 +1336,46 @@ def hmb_get_file(
     ham_path: str = "",
     etiket: str = "",
     birim: str = "",
+    klasor_id: int = 0,
+    klasor_adi: str = "",
 ) -> str:
     """Fetch any HMB statistics file (ms.hmb.gov.tr URL from hmb_list_files).
 
-    If the layout is one of the recognised, validated ones (province revenue
-    statement; province x category tables; item x month/year tables such as
-    the national Merkezi Yönetim denge / gelir / Ekod4 / Fkod3 tables and
-    paylar; one-sheet-per-month crosstabs such as Eko_Fonk) a tidy table is
-    returned with unit, period (donem) and period type (aylık / kümülatif /
-    yıllık / belirsiz). Otherwise NO table is guessed: the reply explains
-    why and, if ham_path is given, the original file is saved there.
+    If the layout is one of the recognised, validated ones a tidy table is
+    returned; otherwise NO table is guessed: the reply explains why and, if
+    ham_path is given, the original file is saved there. Recognised layouts
+    (meta.duzen) and the evidence each must pass:
+      * province revenue statement; province x category tables (provinces
+        sum to Toplam); item x month/year tables (national Merkezi Yönetim
+        denge/gelir/Ekod4/Fkod3, paylar; Toplam = sum of months -> aylık);
+        one-sheet-per-period crosstabs (Eko_Fonk).
+      * "kalem satır x dönem aralığı/yıl sütun": GFS gelir/gider
+        sınıflandırma, Ekod/Fkod/kurumsal/denge tables of Genel Yönetim,
+        Mahalli İdareler and SGK, mali varlık-yükümlülük, iç-dış borç,
+        şarta bağlı, nakit akış, faaliyet sonuçları. Period from each
+        column header ("Ocak-Mart", "Nisan-Haziran", "2025 YILI", months)
+        or the title; ranges all starting in January = kümülatif,
+        consecutive ranges = dönem içi (TOPLAM column checked), month
+        columns only with Toplam = sum-of-months evidence; balance tables
+        (account codes 1-5, "varlık ve yükümlülük", şarta bağlı) =
+        dönem sonu bakiye. Coded rows: every parent = sum of children.
+      * "mizan": debit = credit on TOPLAM, parents = sum of children, and
+        borç-alacak = kalan difference on every account (tutar columns
+        are cumulative incl. opening; kalan columns are period-end balances).
+      * "bilanço": aktif | pasif side by side (single or comparative years);
+        every group = its accounts, main groups = AKTİF/PASİF TOPLAMI,
+        aktif = pasif, borçlu = alacaklı nazım.
+    Any file whose tidy output would repeat a (row, column, period) label
+    is refused (a side-by-side block or column group was not understood).
+
+    Output columns: donem (YYYY, YYYY-MM = period END month), donem_tipi
+    (aylık / kümülatif / dönem içi / yıllık / dönem sonu bakiye / yıl sonu
+    bakiye / kümülatif (yıl başı açılış dahil) / belirsiz), birim
+    ("bin TL" or "%"), deger; plus per layout: kalem, kalem_sira, girinti,
+    sutun, sayfa; kod (account / Ekod code, e.g. "102" or "1.1.10.1"),
+    duzey (code level), bolum (side/block, e.g. "Aktif (Varlıklar)"),
+    donem_araligi (e.g. "Nisan-Haziran"). meta.kontroller lists every check
+    that passed; meta.uyari flags publisher inconsistencies left in place.
 
     Args:
         url: File URL on *.hmb.gov.tr.
@@ -1354,14 +1384,21 @@ def hmb_get_file(
         ham_path: Optional path to save the original file (xls/xlsx/pdf...).
         etiket: Optional file label from hmb_list_files (helps detect
             province code / year when the sheet title lacks them).
-        birim: Only for files that carry NO unit label at all (e.g. 2026
-            Fkod3): your assertion of the unit, "Bin TL" or "Bin YTL". It
-            is recorded in meta.kaynak_birim as a user assertion and is
-            ignored when the file has its own unit label.
+        birim: Only for files that carry NO unit label at all: your
+            assertion of the unit, "Bin TL" or "Bin YTL". Recorded in
+            meta.kaynak_birim as a user assertion; ignored when the file
+            has its own unit label.
+        klasor_id, klasor_adi: Optional, the folder the file came from
+            (hmb_list_files arguments). For files without a unit label
+            this enables a cross-check: the unit is accepted only if the
+            table's top row equals, period by period, a value in a
+            unit-labelled file of the same folder.
     """
     from turkiye_veri_mcp import hmb
 
-    frame, content, meta = hmb.HmbClient().fetch_file(url, dosya_etiketi=etiket, birim_beyani=birim)
+    frame, content, meta = hmb.HmbClient().fetch_file(
+        url, dosya_etiketi=etiket, birim_beyani=birim, klasor_id=klasor_id, klasor_adi=klasor_adi
+    )
     extra: dict = {"kaynak_url": url}
     if ham_path:
         path = Path(ham_path).expanduser()

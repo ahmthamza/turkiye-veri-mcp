@@ -62,7 +62,7 @@ Ortak ilke: araçlar doğrulayamadığı sayıyı sessizce döndürmez; ya kayna
 | `hmb_get_karsilastirma` | İl × kategori bütçe tabloları: `gider`/`gelir`/`vergi`/`denge` ve `mahalli_*`; 1990'dan bugüne |
 | `hmb_get_paylar` | Genel bütçe vergi gelirlerinden mahalli idare ve fonlara aktarılan paylar |
 | `hmb_list_tables` / `hmb_list_files` | Muhasebat sitesindeki tüm istatistik bölümlerini, klasörleri ve dosyaları gezer |
-| `hmb_get_file` | Herhangi bir HMB dosyası: tanınan düzen tidy tabloya çevrilir, tanınmayan gerekçesiyle reddedilir ve `ham_path` ile ham dosya olarak kaydedilir |
+| `hmb_get_file` | Herhangi bir HMB dosyası: mizan, bilanço, borç, bütçe tabloları vb. doğrulanarak tidy tabloya çevrilir; doğrulanamayan gerekçesiyle reddedilir ve `ham_path` ile ham dosya olarak kaydedilir |
 
 ## Kurulum
 
@@ -240,7 +240,7 @@ MIT
 - **TÜİK mikroverisi kapsam dışıdır** (kurumsal başvuruyla dağıtılır).
 - **EVDS:** sunucu tarafı seri araması ve "son N gözlem" ucu yoktur; ikisi de istemci tarafında yapılır. `evds_search_series` dizini ilk kullanımda arka planda kurulur (yaklaşık 8 dakika), 7 günde bir yenilenir; dizin hazır değilken eşleşen veri grupları döner.
 - **BDDK:** Günlük Bülten'in geçmişi yayımlanmıyor (yalnızca son gün ve kalem başına son ~7 iş günü). Kredi kartı ücretleri bülteni (banka bazında ücret bilgisi) ve "Üç Aylık Temel Göstergeler" bağlı değil. FinTürk altın tablosu 2015-9'da başlar. Aylık Bülten'de 6 tablo yalnızca TL'dir.
-- **HMB:** `hmb_get_file` ile örneklenen 854 tablo türünden 298'i tabloya çevriliyor; kalanlar (muhasebe bazlı tablolar, GFS dosyaları, birçok ulusal Mahalli İdare/SGK tablosu, PDF bültenler) yalnızca ham dosya olarak iner. Mahalli İdareler il tabloları 2022 için birim etiketi olmadığından reddedilir. İl dosyalarının toplamı ile Merkezi Yönetim il tablosu 2006'dan itibaren %0,3–1,3 farklıdır (HMB'nin iki ayrı yayını).
+- **HMB:** `hmb_get_file` il dışı 4.360 dosyanın 4.008'ini doğrulayarak tabloya çevirir; kalan 352 dosya yalnızca ham dosya olarak iner: 137 PDF, birimi doğrulanamayan 73 dosya, 55 revizyon ölçüm tablosu, kendi toplamları tutmayan 39 mizan/bilanço ve dönemi/yılı belirsiz küçük gruplar. Altında ikinci bir tablo bulunan 19 "Önceki Yılla Karşılaştırmalı" denge dosyasında alttaki tablo okunmaz (uyarı verilir). Yayımcı hataları (ör. 2007 İl Özel İdareleri Mali Varlık "Ocak-Mart" sütunu 10 kat) dosyadaki gibi döner. İl dosyalarının toplamı ile Merkezi Yönetim il tablosu 2006'dan itibaren %0,3–1,3 farklıdır (HMB'nin iki ayrı yayını).
 - **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code ve Cursor'da `X-Evds-Api-Key` başlığıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) özel başlık desteklemediği için web'den bağlananlar sunucu sahibinin kotasını paylaşır; yoğun/toplu sorgulardan kaçının.
 - **Hosted sunucuda `output_path` sunucunun diskine yazar**, sizin bilgisayarınıza değil; dosya çıktısı için yerel kurulum kullanın.
 

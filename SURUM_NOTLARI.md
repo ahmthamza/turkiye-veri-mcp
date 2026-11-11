@@ -1,5 +1,18 @@
 # Sürüm notları
 
+## v0.35.0 — HMB: tabloya çevrilen dosya 1.559 → 4.008; kullanım sayacı; Cursor
+**HMB (`hmb_get_file`)**
+- Yeni doğrulanan düzenler: mizan, bilanço (tek yıl ve karşılaştırmalı), mali varlık-yükümlülük, iç-dış borç, şarta bağlı, nakit akış, faaliyet sonuçları ile Ekod/Fkod/kurumsal/denge tabloları (Ocak-Mart, Nisan-Haziran gibi dönem aralıklı). İl dışı 4.360 dosyalık envanterde tabloya çevrilen dosya 1.559'dan 4.008'e çıktı.
+- Her yeni düzen iç tutarlılıkla doğrulanır: alt kalemler = üst kalem, borç = alacak, aktif = pasif, TOPLAM sütunu = dönemler toplamı. Tutmazsa tablo döndürülmez.
+- **Hata düzeltmesi:** önceki sürüm yan yana aktif|pasif bilançolarda ve çok yıllı tablolarda değerleri yanlış etikete/yıla yazıyordu (183 dosya). Aynı satır/sütun/dönem etiketi iki kez geçen çıktılar artık reddediliyor; bu dosyaların 168'i doğru yapıyla yeniden okunuyor.
+- **Hata düzeltmesi:** çapraz tablolar boş kalem/bölüm başlığı satırında kesiliyordu (ör. 2024 Özel Bütçeli İdareler Gelirleri 576 → 11.446 satır; 49 dosya toplam 123.957 satır kazandı). Tablo sonu belirsizse `meta.uyari` yazılır.
+- Birim etiketi olmayan dosyalarda birim, aynı klasördeki etiketli bir dosyanın aynı dönem değeriyle birebir tutarsa kabul edilir (`klasor_id`, `klasor_adi` parametreleri).
+- Yeni sütunlar: `kod`, `duzey`, `bolum`, `donem_araligi`; yeni `donem_tipi` değerleri (dönem içi, dönem sonu bakiye, yıl sonu bakiye).
+
+**Kullanım sayacı ve istemciler**
+- Oturum, tekil ziyaretçi (tuzlu özet; ham IP saklanmaz), istemci başına tekil ziyaretçi ve çağrı sayıları; herkese açık `/stats`.
+- README'ye Cursor kurulumu eklendi.
+
 ## v0.34.0 — Dört kaynağın tamamı canlı doğrulandı; 14 → 30 araç
 Dört kaynağın her veri yolu canlı sistemlere karşı baştan sona denendi, kök nedenler teşhis edilip düzeltildi, kapsam genişletildi. 200 test (çevrimdışı + canlı) eklendi.
 

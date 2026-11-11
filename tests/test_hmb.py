@@ -372,6 +372,53 @@ def test_parse_sheet_crosstab_and_auto_parse():
     assert junk is None and reasons
 
 
+def _gelir_sheet(month, tail):
+    return [
+        [f"2026 YILI {month} ÖZEL BÜTÇELİ İDARELER GELİRLERİ (KÜMÜLATİF)"],
+        [None, None, None, "(Bin TL)"],
+        [None, "Tahakkuk", "Tahsilat", "%"],
+        ["Özel Bütçe Gelirleri", 10.0, 8.0, 80.0],
+        ["I-Vergi Gelirleri", 4.0, 3.0, 75.0],
+        ["Diğer Harçlar", None, None, None],  # boş kalem / bölüm başlığı: tablo sürer
+        ["Gemi Sağlık Resmi", 4.0, 3.0, 75.0],
+        ["II-Teşebbüs ve Mülkiyet Gelirleri", 6.0, 5.0, 83.3],
+        *tail,
+    ]
+
+
+def test_parse_sheet_crosstab_continues_past_empty_labelled_row():
+    # 2026-11: önceki sürüm "Diğer Harçlar" satırında duruyordu (ilk 2 satır)
+    tail = [[None], ["* Bütçe hedefi kanun ödeneğidir.", None, None, None], ["(1) Not satırı", 99.0, None, None]]
+    content = _xlsx({"EYLÜL": _gelir_sheet("EYLÜL", tail)})
+    f, _ = hmb.auto_parse(content)
+    assert f is not None and f.attrs["meta"]["duzen"].startswith("sayfa başına")
+    assert f.drop_duplicates("satir").satir.tolist() == [
+        "Özel Bütçe Gelirleri", "I-Vergi Gelirleri", "Gemi Sağlık Resmi", "II-Teşebbüs ve Mülkiyet Gelirleri",
+    ]
+    assert f.drop_duplicates("satir").satir_sira.tolist() == [1, 2, 3, 4]
+    tl = f[f.kategori == "Tahakkuk"].set_index("satir").deger
+    assert tl["I-Vergi Gelirleri"] + tl["II-Teşebbüs ve Mülkiyet Gelirleri"] == tl["Özel Bütçe Gelirleri"]
+    # dipnot (sayılı olsa bile) veri olarak alınmaz, uyarı düşülür
+    assert "Not satırı" not in set(f.satir) and "(1) Not satırı" not in set(f.satir)
+    assert "bitti sayıldı" in f.attrs["meta"]["uyari"]
+
+
+def test_parse_sheet_crosstab_footnote_tail_and_stacked_table():
+    # yalnız dipnot kuyruğu: uyarı yok
+    plain = hmb.parse_sheet_crosstab(_xlsx({"EYLÜL": _gelir_sheet("EYLÜL", [["Kaynak: HMB"]])}))
+    assert "uyari" not in plain.attrs["meta"] and plain.satir.nunique() == 4
+    # alt alta ikinci tablo (başlık + sütun başlıkları): birleştirilmez, uyarı
+    second = [["2025 YILI ÖZEL BÜTÇELİ İDARELER GELİRLERİ"], [None, "Tahakkuk", "Tahsilat", "%"], ["Özel Bütçe Gelirleri", 7.0, 6.0, 85.7]]
+    f = hmb.parse_sheet_crosstab(_xlsx({"EYLÜL": _gelir_sheet("EYLÜL", second)}))
+    assert f.satir.nunique() == 4 and len(f[f.satir == "Özel Bütçe Gelirleri"]) == 3
+    assert "1 sayısal satır" in f.attrs["meta"]["uyari"]
+    # tablonun içindeki etiketsiz sayısal satır hâlâ reddedilir
+    bad = _gelir_sheet("EYLÜL", [])
+    bad.insert(5, [None, 1.0, 1.0, 100.0])
+    with pytest.raises(hmb.HmbLayoutError):
+        hmb.parse_sheet_crosstab(_xlsx({"EYLÜL": bad}))
+
+
 # ---------------------------------------------------------------- araç yardımcıları
 
 
@@ -513,3 +560,270 @@ def test_period_cells_and_title_typos():
     assert hmb.is_period_cell("IV.QUARTER") and not hmb.is_period_cell("Pers. Giderleri")
     assert hmb._is_legend_row(["Ocak-Mart", "Ocak Haziran", "Ocak-Eylül"])
     assert not hmb.is_period_cell(" OCAK-ARALIK 1990")  # yıl taşıyan başlık hücresi
+
+
+# ---------------------------------------------------------------- D: kalem x dönem aralığı (2026-11-12)
+
+
+def test_range_token_and_head():
+    assert hmb.range_token("Ocak-Mart") == (1, 3)
+    assert hmb.range_token("NİSAN-HAZİRAN") == (4, 6)
+    assert hmb.range_token("Ocak - Mart Dönemi") == (1, 3)
+    assert hmb.range_token("(OCAK-EYLÜL)") == (1, 9)
+    assert hmb.range_token(" II. Çeyrek") == (4, 6)
+    assert hmb.range_token("Mart-Ocak") is None and hmb.range_token("Ocak") is None
+    h = hmb._classify_head(["Ocak-Aralık            % Dağılım"])
+    assert h.pct and h.aralik == (1, 12)
+    h = hmb._classify_head([2009.0, "Bütçe", "Tahmini"])
+    assert h.yil == 2009 and not h.pct
+    assert hmb._classify_head(["Harcama", "Toplamı"]).toplam
+    assert hmb._title_years("2006 YILI BELEDİYELER BÜTÇE GELİRLERİ (2007 Yılı Bazında)") == [2006]
+
+
+def _gfs(ranges=("Ocak-Mart", "Ocak-Haziran"), title="GENEL YÖNETİM 2014 YILI GELİRLERİN EKONOMİK SINIFLANDIRILMASI TABLOSU (Bin TL)"):
+    return [
+        [title],
+        [],
+        ["", *ranges, "Ocak-Haziran % Dağılım"],
+        ["FAALİYET GELİRLERİ TOPLAMI", 100.0, 210.0, 100.0],
+        ["Vergi Gelirleri", 60.0, 130.0, 61.9],
+    ]
+
+
+def test_kalem_cumulative_ranges_and_form_sheets_skipped():
+    form = [["ÖDEME EMRİ BELGESİ"], ["Muhasebe Birimi Kodu"], ["Hesap No", "", "Kurumsal Kod"], ["", "", 1.0, 2.0]]
+    f = hmb.parse_kalem_tablosu(_xlsx({"GYMY ÖRNEK 1": form, "Sayfa1": _gfs()}))
+    assert f.attrs["meta"]["donem_tipi"] == "kümülatif"
+    r = f[(f.kalem == "Vergi Gelirleri") & (f.donem == "2014-06") & (f.birim == "bin TL")]
+    assert r.deger.item() == 130.0 and r.donem_araligi.item() == "Ocak-Haziran"
+    assert set(f[f.birim == "%"].donem) == {"2014-06"}
+    assert "GYMY ÖRNEK 1" in f.attrs["meta"]["atlanan_sayfalar"]
+    with pytest.raises(hmb.HmbLayoutError, match="birim"):
+        hmb.parse_kalem_tablosu(_xlsx({"s": _gfs(title="GENEL YÖNETİM 2014 YILI GELİRLER")}))
+    with pytest.raises(hmb.HmbLayoutError, match="ne kümülatif ne ardışık"):
+        hmb.parse_kalem_tablosu(_xlsx({"s": _gfs(ranges=("Ocak-Mart", "Temmuz-Eylül"))}))
+
+
+def _ekod(q2_total=12.0, toplam_ok=True, unit="Bin TL", k=1.0):
+    rows = [
+        ["2026 YILI MAHALLİ İDARELER BÜTÇE GİDERLERİNİN EKONOMİK SINIFLANDIRILMASI TABLOSU"],
+        ["", "", "", "", "", "", "", "", unit],
+        ["", "", "", "", "OCAK-MART", "NİSAN-HAZİRAN", "TEMMUZ-EYLÜL", "EKİM-ARALIK", "TOPLAM"],
+        [0.0, 0.0, 0.0, "BÜTÇE GİDERLERİ HESABI", 10.0, q2_total, "", "", 22.0 if toplam_ok else 99.0],
+        [1.0, 0.0, 0.0, "Personel Giderleri", 6.0, 7.0, "", "", 13.0],
+        [1.0, 1.0, 0.0, "Memurlar", 6.0, 7.0, "", "", 13.0],
+        ["02", 0.0, 0.0, "SGK Devlet Primi", 4.0, 5.0, "", "", 9.0],
+    ]
+    return [[c * k if isinstance(c, float) and j > 3 else c for j, c in enumerate(r)] for r in rows]
+
+
+def test_kalem_quarterly_codes_hierarchy_and_toplam():
+    f = hmb.parse_kalem_tablosu(_xlsx({"Y1-6": _ekod()}))
+    m = f.attrs["meta"]
+    assert m["donem_tipi"] == "dönem içi" and m["donemler"] == ["2026-03", "2026-06"]  # boş çeyrekler atlanır
+    assert set(f.kod) == {"", "1", "1.1", "2"}
+    assert any("üst kalem = alt kalemler toplamı" in k for k in m["kontroller"])
+    assert any("TOPLAM = dönemler toplamı" in k for k in m["kontroller"])
+    with pytest.raises(hmb.HmbLayoutError, match="hiyerarşi"):
+        hmb.parse_kalem_tablosu(_xlsx({"Y1-6": _ekod(q2_total=40.0, toplam_ok=False)}))
+    with pytest.raises(hmb.HmbLayoutError, match="TOPLAM|hiyerarşi"):
+        hmb.parse_kalem_tablosu(_xlsx({"Y1-6": _ekod(toplam_ok=False)}))
+
+
+def test_kalem_stock_two_blocks():
+    rows = [
+        [" GENEL YÖNETİM 2014 YILI MALİ VARLIK VE YÜKÜMLÜLÜKLER TABLOSU (Bin TL)"],
+        ["", "MALİ VARLIĞIN TÜRÜ", "Ocak-Mart", "Ocak-Haziran", "", "YÜKÜMLÜLÜĞÜN TÜRÜ", "Ocak-Mart", "Ocak-Haziran"],
+        [100.0, "KASA", 5.0, 6.0, 300.0, "BANKA KREDİLERİ", 7.0, 8.0],
+        [102.0, "BANKA", 50.0, 60.0, 303.0, "KAMU İDARELERİNE MALİ BORÇLAR", 9.0, 10.0],
+        ["MALİ VARLIKLAR TOPLAMI (A)", "", 55.0, 66.0, "YÜKÜMLÜLÜKLER TOPLAMI (B)", "", 16.0, 18.0],
+    ]
+    f = hmb.parse_kalem_tablosu(_xlsx({"MALİ VARLIK": rows}))
+    assert f.attrs["meta"]["donem_tipi"] == "dönem sonu bakiye"
+    kasa = f[(f.kod == "100") & (f.donem == "2014-06")]
+    banka_kredi = f[(f.kod == "300") & (f.donem == "2014-06")]
+    assert kasa.deger.item() == 6.0 and banka_kredi.deger.item() == 8.0
+    assert set(f.bolum) == {"MALİ VARLIĞIN TÜRÜ", "YÜKÜMLÜLÜĞÜN TÜRÜ"}
+    assert f[f.kalem == "YÜKÜMLÜLÜKLER TOPLAMI (B)"].bolum.iloc[0] == "YÜKÜMLÜLÜĞÜN TÜRÜ"
+
+
+def test_kalem_months_need_toplam_evidence_and_closed_year_rule():
+    def sheet(total):
+        return [
+            ["2003 KONSOLİDE BÜTÇE GİDERLERİ AYLIK GERÇEKLEŞMELER"],
+            [" ", "Oca", "Şub", "", 2003.0],
+            ["(Milyar TL)", "", "", "Harcama", "Bütçe"],
+            [" ", "", "", "Toplamı", "Hedefi"],
+            ["Giderler", 10.0, 20.0, total, 300.0],
+            ["  Cari", 4.0, 5.0, 9.0, 100.0],
+        ]
+
+    f = hmb.parse_kalem_tablosu(_xlsx({"T2": sheet(30.0)}))
+    assert set(f[f.donem_tipi == "aylık"].donem) == {"2003-01", "2003-02"}
+    assert f[f.sutun.str.contains("Hedefi")].donem_tipi.iloc[0] == "yıllık"
+    with pytest.raises(hmb.HmbLayoutError, match="ay içi mi kümülatif mi"):
+        hmb.parse_kalem_tablosu(_xlsx({"T2": sheet(99.0)}))
+    # dönem yalnızca başlıktaki yıl: kapanmış yıl -> yıllık, içinde bulunulan yıl -> ret
+    import datetime
+
+    def single(year):
+        return [[f"{year} YILI BELEDİYELER BÜTÇE GELİRLERİ"], ["", "Bin YTL" if year < 2009 else "Bin TL"],
+                ["BÜTÇE GELİRLERİ", 100.0], ["Vergi Gelirleri", 40.0]]
+
+    f = hmb.parse_kalem_tablosu(_xlsx({"YB": single(2006)}))
+    assert f.attrs["meta"]["donem_tipi"] == "yıllık" and set(f.donem) == {"2006"}
+    with pytest.raises(hmb.HmbLayoutError, match="kapanmadığı"):
+        hmb.parse_kalem_tablosu(_xlsx({"YB": single(datetime.date.today().year)}))
+
+
+def test_kalem_refuses_revision_tables_and_accounting_layouts():
+    import datetime
+
+    rev = [["2015 YILI NAKİT DENGESİ REVİZYON (Bin TL)"], ["Referans Dönem", "", " I. Çeyrek"]] + [
+        [datetime.date(2015, m, 1), "", 1.0] for m in range(6, 10)
+    ]
+    with pytest.raises(hmb.HmbLayoutError, match="revizyon"):
+        hmb.parse_kalem_tablosu(_xlsx({"Nakit": rev}))
+
+
+# ---------------------------------------------------------------- E: mizan / bilanço
+
+
+def _mizan(alacak_total=150.0, kalan_shift=0.0, title="GENEL YÖNETİM 2014 YILI OCAK-EYLÜL DÖNEMİ MİZANI (Bin TL)"):
+    return [
+        [title],
+        [],
+        ["HESAP KODU", "HESAP ADI", "BORÇ TUTARI", "ALACAK TUTARI", "BORÇ KALANI", "ALACAK KALANI"],
+        [1.0, "DÖNEN VARLIKLAR", 150.0, 100.0, 50.0, 0.0],
+        [10.0, "HAZIR DEĞERLER", 150.0, 100.0, 50.0, 0.0],
+        [100.0, "KASA", 100.0, 70.0, 30.0 + kalan_shift, 0.0],
+        [102.0, "BANKA", 50.0, 30.0, 20.0, 0.0],
+        [3.0, "KISA VADELİ YABANCI KAYNAKLAR", 0.0, 50.0, 0.0, 50.0],
+        [30.0, "İÇ MALİ BORÇLAR", 0.0, 50.0, 0.0, 50.0],
+        [300.0, "BANKA KREDİLERİ", 0.0, 50.0, 0.0, 50.0],
+        ["TOPLAM", "", 150.0, alacak_total, 50.0, 50.0],
+        ["1) Not"],
+    ]
+
+
+def test_parse_mizan():
+    f = hmb.parse_mizan(_xlsx({"MİZAN": _mizan()}))
+    m = f.attrs["meta"]
+    assert m["donemler"] == ["2014-09"]
+    k = f[(f.kod == "100") & (f.sutun == "Borç Kalanı")]
+    assert k.deger.item() == 30.0 and k.donem_tipi.item() == "dönem sonu bakiye" and k.duzey.item() == 3
+    assert set(f[f.sutun == "Borç Tutarı"].donem_tipi) == {"kümülatif (yıl başı açılış dahil)"}
+    assert any("borç tutarı = alacak tutarı" in c for c in m["kontroller"])
+    with pytest.raises(hmb.HmbLayoutError, match="TOPLAM"):
+        hmb.parse_mizan(_xlsx({"MİZAN": _mizan(alacak_total=140.0)}))
+    with pytest.raises(hmb.HmbLayoutError, match="kalan"):
+        hmb.parse_mizan(_xlsx({"MİZAN": _mizan(kalan_shift=5.0)}))
+    f = hmb.parse_mizan(_xlsx({"MİZAN": _mizan(title="DDK 2012 YILI KESİN MİZANI (Bin TL)")}))
+    assert f.attrs["meta"]["donemler"] == ["2012-12"]
+    # mizan biçimli dosyayı genel kalem ayrıştırıcısı almaz
+    with pytest.raises(hmb.HmbLayoutError, match="mizan"):
+        hmb.parse_kalem_tablosu(_xlsx({"MİZAN": _mizan(alacak_total=140.0)}))
+
+
+def _bilanco(pasif_total=100.0, years=None):
+    y = years or ["", ""]
+    return [
+        ["GENEL YÖNETİM 2012 YILI KONSOLİDE BİLANÇOSU (Bin TL)"],
+        ["AKTİF (VARLIKLAR)", "", "", y[0], "PASİF (KAYNAKLAR)", "", "", y[1]],
+        [1.0, "DÖNEN VARLIKLAR", "", 100.0, 3.0, "KISA VADELİ YABANCI KAYNAKLAR", "", 60.0],
+        [10.0, "HAZIR DEĞERLER", "", 70.0, 30.0, "İÇ MALİ BORÇLAR", "", 60.0],
+        ["", 100.0, "KASA", 30.0, "", 300.0, "BANKA KREDİLERİ", 60.0],
+        ["", 102.0, "BANKA", 40.0, 5.0, "ÖZ KAYNAKLAR", "", 40.0],
+        ["", "DİĞER ALACAKLAR", "", 30.0, 57.0, "GEÇMİŞ YILLAR OLUMLU", "", 40.0],
+        [14.0, 140.0, "KİŞİLERDEN ALACAKLAR", 30.0, "", 570.0, "GEÇMİŞ YILLAR OLUMLU", 40.0],  # 14 bir satır kaymış
+        ["", "", "", "", "", "2010 Yılı Olumlu Faaliyet Sonucu", "", 15.0],
+        ["", "", "", "", "", "2011 Yılı Olumlu Faaliyet Sonucu", "", 25.0],
+        ["", "", "AKTİF TOPLAMI", 100.0, "", "", "PASİF TOPLAMI", pasif_total],
+    ]
+
+
+def test_parse_bilanco_shifted_codes_and_balance():
+    f = hmb.parse_bilanco(_xlsx({"BİLANÇO": _bilanco()}))
+    m = f.attrs["meta"]
+    assert m["donemler"] == ["2012"] and m["donem_tipi"] == "yıl sonu bakiye"
+    akt = f[f.bolum == "Aktif (Varlıklar)"].set_index("kalem")
+    assert akt.loc["DİĞER ALACAKLAR", "kod"] == "14"  # kod alt hesaptan türetildi
+    assert any("aktif toplamı = pasif toplamı" in c for c in m["kontroller"])
+    alt = f[f.kalem.str.startswith("2010 Yılı")]
+    assert alt.kod.isna().all()  # 570'in alt kırılımı, hiyerarşiye girmez
+    with pytest.raises(hmb.HmbLayoutError, match="doğrulanamadı"):
+        hmb.parse_bilanco(_xlsx({"BİLANÇO": _bilanco(pasif_total=90.0)}))
+
+
+def test_auto_parse_refuses_duplicate_cells_and_routes_bilanco():
+    # dünkü geniş ayrıştırıcı yan yana aktif|pasif yıllarını aynı kaleme yazıyordu
+    rows = _bilanco(years=[2012.0, 2012.0])
+    for r in rows[2:]:
+        r += [""] * (8 - len(r))
+    years_rows = [["GENEL YÖNETİM 2011-2013 YILLARI KARŞILAŞTIRMALI BİLANÇOSU (Bin TL)"],
+                  ["AKTİF (VARLIKLAR)", "", "", 2011.0, 2012.0, 2013.0, "PASİF (KAYNAKLAR)", "", "", 2011.0, 2012.0, 2013.0]]
+    body = []
+    for r in rows[2:]:
+        a, p = r[:4], r[4:8]
+        body.append(a[:3] + [a[3]] * 3 + p[:3] + [p[3]] * 3 if a[3] != "" or p[3] != "" else a + p)
+    f, reasons = hmb.auto_parse(_xlsx({"BİLANÇO": years_rows + body}))
+    assert f is not None and f.attrs["meta"]["duzen"].startswith("bilanço")
+    assert sorted(set(f.donem)) == ["2011", "2012", "2013"]
+    assert any("aynı satır/sütun/dönem" in r for r in reasons)  # geniş ayrıştırıcı reddedildi
+
+
+def test_fetch_file_unit_from_folder_sibling(monkeypatch):
+    client = hmb.HmbClient()
+    unitless = _xlsx({"YBIR-6": _ekod(unit="", k=1000.0)})
+    labelled = [
+        ["2026 YILI MAHALLİ İDARELER BÜTÇE DENGE TABLOSU"], ["", "", "", "", "", "(Bin TL)"],
+        ["", "OCAK-MART", "NİSAN-HAZİRAN", "TEMMUZ-EYLÜL", "EKİM-ARALIK", "TOPLAM"],
+        ["Harcamalar", 10000.0, 12000.0, "", "", 22000.0], ["Gelirler", 8000.0, 9000.0, "", "", 17000.0],
+    ]
+    files = {"https://ms.hmb.gov.tr/u.xls": unitless, "https://ms.hmb.gov.tr/d.xls": _xlsx({"Özet": labelled})}
+    monkeypatch.setattr(client, "download", lambda url: files[url])
+    monkeypatch.setattr(client, "list_files", lambda fid, name: [
+        hmb.HmbFile("Ekod4", "https://ms.hmb.gov.tr/u.xls"), hmb.HmbFile("Denge", "https://ms.hmb.gov.tr/d.xls")])
+    f, _, meta = client.fetch_file("https://ms.hmb.gov.tr/u.xls")
+    assert f is None and "birim" in meta["neden"]  # klasör bilgisi yoksa ret
+    f, _, meta = client.fetch_file("https://ms.hmb.gov.tr/u.xls", klasor_id=1, klasor_adi="x")
+    assert f is not None and "doğrulandı" in meta["kaynak_birim"][0]
+    labelled[3][2] = 13000.0  # ikinci çeyrek tutmazsa ret
+    labelled[3][5] = 23000.0
+    files["https://ms.hmb.gov.tr/d.xls"] = _xlsx({"Özet": labelled})
+    f, _, meta = client.fetch_file("https://ms.hmb.gov.tr/u.xls", klasor_id=1, klasor_adi="x")
+    assert f is None and "eşleşen" in meta["neden"]
+
+
+# ---------------------------------------------------------------- canlı (yeni aileler)
+
+
+def _live_file(client, slug, path_contains, label_contains):
+    tree = client.section_tree(slug)
+    for path, node in tree.walk():
+        if node.id is None or node.children:
+            continue
+        if all(p in " > ".join(path) for p in path_contains):
+            for f in client.list_files(node.id, node.name or ""):
+                if label_contains in f.etiket:
+                    return f, node
+    pytest.skip(f"{slug}: {path_contains}/{label_contains} bulunamadı")
+
+
+@pytest.mark.live
+def test_live_mizan_and_bilanco(live_client):
+    f, node = _live_file(live_client, "genel-yonetim-sektoru-mali-istatistikleri-2", ["2014", "Mizan"], "Kesin")
+    frame, _, meta = live_client.fetch_file(f.url, dosya_etiketi=f.etiket)
+    assert frame is not None and meta["duzen"].startswith("mizan") and meta["donemler"] == ["2014-12"]
+    f, node = _live_file(live_client, "genel-yonetim-mali-raporlama", ["Merkezi Yönetim"], "Bilanço")
+    frame, _, meta = live_client.fetch_file(f.url, dosya_etiketi=f.etiket)
+    assert frame is not None and meta["duzen"].startswith("bilanço")
+    assert any("aktif toplamı = pasif toplamı" in c for c in meta["kontroller"])
+
+
+@pytest.mark.live
+def test_live_quarterly_ekod4_with_unit_sibling(live_client):
+    f, node = _live_file(live_client, "mahalli-idareler-butce-istatistikleri", ["2026", "Gider"], "Mahalli İdare Birlikleri Bütçe Giderleri Ekod4")
+    frame, _, meta = live_client.fetch_file(f.url, dosya_etiketi=f.etiket, klasor_id=node.id, klasor_adi=node.name)
+    assert frame is not None, meta.get("neden")
+    assert meta["donem_tipi"] == "dönem içi" and "doğrulandı" in meta["kaynak_birim"][0]
