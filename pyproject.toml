@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "turkiye-veri-mcp"
-version = "0.33.0"
+version = "0.34.0"
 description = "MCP server for Turkish official data: TUIK, TCMB EVDS, BDDK and HMB in one place"
 readme = "README.md"
 license = { text = "MIT" }
@@ -17,7 +17,6 @@ dependencies = [
     "pandas>=2.0",
     "openpyxl>=3.1",
     "xlrd>=2.0",
-    "pyjstat>=2.4",
     "python-calamine>=0.3",
     "certifi",
 ]
@@ -33,3 +32,8 @@ turkiye-veri-probe = "turkiye_veri_mcp.probe:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/turkiye_veri_mcp"]
 artifacts = ["src/turkiye_veri_mcp/certs/*.pem"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["live: hits the real TUIK/EVDS/BDDK/HMB endpoints (needs internet; EVDS also needs EVDS_API_KEY)"]

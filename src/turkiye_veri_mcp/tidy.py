@@ -47,6 +47,8 @@ def looks_like_period(value: Any) -> bool:
     if isinstance(value, (int, float)) and float(value).is_integer():
         return 1900 <= float(value) <= 2100
     text = str(value).strip()
+    # Revision/footnote marks on periods: '2017(r)', '2020 (1)', '2021*'.
+    text = re.sub(r"\s*(\([^)]{1,4}\)|\*+)$", "", text).strip()
     return any(pattern.match(text) for pattern in _PERIOD_PATTERNS)
 
 
@@ -202,6 +204,91 @@ def _extract_sections(body: pd.DataFrame) -> tuple[pd.DataFrame, list[str | None
     return kept, labels
 
 
+_PERIOD_HEADER_WORDS = {
+    "yil", "yillar", "year", "years", "ay", "aylar", "month", "months",
+    "ceyrek", "quarter", "donem", "period", "tarih", "date",
+}
+_CODE_HEADER_WORDS = {"kod", "kodu", "code", "codes", "sira", "rank"}
+_TEXT_MARKERS = ("-", "–", "—", "..", ".", ":", "*", "x", "X", "c", "C")
+
+
+def _fold(text: Any) -> str:
+    from turkiye_veri_mcp.portal import fold_tr
+
+    return fold_tr(str(text))
+
+
+def _header_words(name: str) -> set[str]:
+    return set(_fold(name).split())
+
+
+def _as_int(value: Any) -> int | None:
+    number = _numeric_value(value)
+    if number is None or not float(number).is_integer():
+        return None
+    return int(number)
+
+
+def roles_period(name: str, column: pd.Series) -> bool:
+    """True if a stub column holds periods (years, months, quarters)."""
+    values = [v for v in column.tolist() if not _is_blank(v)]
+    if not values:
+        return False
+    if all(looks_like_period(v) for v in values):
+        return True
+    if _header_words(name) & _PERIOD_HEADER_WORDS:
+        ints = [_as_int(v) for v in values]
+        if all(i is not None and 1 <= i <= 12 for i in ints):
+            return True
+        texts = [v for v in values if isinstance(v, str) and _numeric_value(v) is None]
+        return len(texts) == len(values)
+    return False
+
+
+def _column_role(name: str, column: pd.Series) -> str:
+    """'id' (label/stub column), 'value' (observations) or 'empty'.
+
+    id: mostly text; or every value a year; or a period-named header
+    (Yıl/Ay/Çeyrek/Dönem...) whose values are month/quarter numbers or
+    text; or a code-named header (Kod/Code/Sıra) with integer values.
+    Otherwise numbers make it a value column. Suppression markers ('-',
+    '..', 'x', 'C') count as neither text nor numbers.
+    """
+    values = [v for v in column.tolist() if not _is_blank(v)]
+    if not values:
+        return "empty"
+    if roles_period(name, column):
+        return "id"
+    words = _header_words(name)
+    if words & _CODE_HEADER_WORDS and all(_as_int(v) is not None or isinstance(v, str) for v in values):
+        return "id"
+    numeric = sum(1 for v in values if _numeric_value(v) is not None)
+    markers = sum(1 for v in values if isinstance(v, str) and v.strip() in _TEXT_MARKERS)
+    text = len(values) - numeric - markers
+    if numeric == 0 or text > 0.2 * len(values):
+        return "id"
+    return "value"
+
+
+def _fill_merged_stubs(body: pd.DataFrame, id_columns: list[str]) -> None:
+    """Fill vertically merged stub cells, in place.
+
+    Excel merged cells arrive as one value followed by blanks. A blank in
+    an id column is filled from above only when a more detailed id column
+    to its right has a value in that row (so it is a continuation of the
+    group above, e.g. the year next to month 2..12). A row whose stub
+    cells are all blank is left blank rather than guessed.
+    """
+    for position, column in enumerate(id_columns):
+        right = id_columns[position + 1:]
+        if not right:
+            break
+        blank = body[column].map(_is_blank)
+        right_has_value = ~body[right].apply(lambda row: all(_is_blank(v) for v in row), axis=1)
+        filled = body[column].where(~blank).ffill()
+        body[column] = body[column].where(~(blank & right_has_value), filled)
+
+
 def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str, dict[str, Any]]:
     """Tidy one sheet. Returns (long DataFrame, confidence note, debug info)."""
     frame = raw.dropna(axis=0, how="all").dropna(axis=1, how="all")
@@ -257,67 +344,61 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str, dict[str, Any]]:
         return selected.iloc[:, 0] if isinstance(selected, pd.DataFrame) else selected
 
     period_columns = [c for c in columns if looks_like_period(c)]
-    label_columns = [c for c in columns if c not in period_columns]
-    section_id = ["_bolum"] if has_sections else []
+    # Judge column roles on observation rows only: repeated header rows
+    # ('Yıl'/'Year' between blocks) and source/footnote lines would
+    # otherwise make a year column look like text-or-numbers.
+    obs_rows = body.apply(
+        lambda row: any(
+            _numeric_value(v) is not None and not looks_like_period(v) for v in row.tolist()
+        ),
+        axis=1,
+    )
+    sample = body[obs_rows] if obs_rows.any() else body
 
-    if period_columns and label_columns:
+    def _sample_col(name: str) -> pd.Series:
+        selected = sample[name]
+        return selected.iloc[:, 0] if isinstance(selected, pd.DataFrame) else selected
+
+    roles = {c: _column_role(c, _sample_col(c)) for c in columns if c not in period_columns}
+    id_columns = [c for c, role in roles.items() if role == "id"]
+    value_columns = [c for c, role in roles.items() if role == "value"]
+    section_id = ["_bolum"] if has_sections else []
+    debug["column_roles"] = roles
+
+    if period_columns:
+        # Period headers (crosstab): every non-period column is an id.
+        ids = [c for c in columns if c not in period_columns]
+        _fill_merged_stubs(body, ids)
         long = body.melt(
-            id_vars=label_columns + section_id,
+            id_vars=ids + section_id or None,
             value_vars=period_columns,
             var_name="donem",
             value_name="deger",
         )
-        note = f"crosstab unpivot ({len(label_columns)} etiket, {len(period_columns)} dönem)"
-    elif period_columns:
-        long = body.melt(
-            id_vars=section_id or None,
-            value_vars=period_columns,
-            var_name="donem",
-            value_name="deger",
+        note = (
+            f"crosstab unpivot ({len(ids)} etiket, {len(period_columns)} dönem)"
+            if ids else "yalnızca dönem sütunları"
         )
-        note = "yalnızca dönem sütunları"
     else:
-        # A period column instead of period headers (long already).
-        period_like = [
-            c for c in columns
-            if _col(c).map(looks_like_period).mean() > 0.7
-        ]
-        if period_like:
-            period_column = period_like[0]
-            value_columns = [
-                c for c in columns
-                if c != period_column
-                and pd.to_numeric(_col(c), errors="coerce").notna().mean() > 0.5
-            ]
-            if not value_columns:
-                raise TidyError("period column found but no numeric value columns")
-            id_columns = [c for c in columns if c not in value_columns and c != period_column]
-            long = body.melt(
-                id_vars=id_columns + section_id + [period_column],
-                value_vars=value_columns,
-                var_name="gosterge",
-                value_name="deger",
-            ).rename(columns={period_column: "donem"})
-            note = "zaten uzun format (dönem sütunu)"
-        else:
-            # No period anywhere: a single-reference-period ("snapshot")
-            # table -- category + value columns, no time dimension at all.
-            value_columns = [
-                c for c in columns
-                if pd.to_numeric(_col(c), errors="coerce").notna().mean() > 0.5
-            ]
-            if not value_columns:
-                raise TidyError(
-                    "no period columns/headers found, and no numeric value "
-                    "columns either"
-                )
-            id_columns = [c for c in columns if c not in value_columns]
-            long = body.melt(
-                id_vars=id_columns + section_id,
-                value_vars=value_columns,
-                var_name="gosterge",
-                value_name="deger",
+        _fill_merged_stubs(body, id_columns)
+        if not value_columns:
+            raise TidyError(
+                "no period columns/headers found, and no numeric value "
+                "columns either"
             )
+        long = body.melt(
+            id_vars=id_columns + section_id,
+            value_vars=value_columns,
+            var_name="gosterge",
+            value_name="deger",
+        )
+        period_ids = [c for c in id_columns if roles_period(c, _sample_col(c))]
+        if len(period_ids) == 1 and "donem" not in long.columns:
+            long = long.rename(columns={period_ids[0]: "donem"})
+            note = f"uzun format (dönem sütunu '{period_ids[0]}'), {len(value_columns)} değer sütunu"
+        elif period_ids:
+            note = f"uzun format (dönem sütunları {period_ids}), {len(value_columns)} değer sütunu"
+        else:
             note = "dönem bilgisi yok (tek dönemlik/snapshot tablo)"
 
     if has_sections:
@@ -351,7 +432,25 @@ def tidy_sheet(raw: pd.DataFrame) -> tuple[pd.DataFrame, str, dict[str, Any]]:
     long = long[long["deger"].notna()].reset_index(drop=True)
     if long.empty:
         raise TidyError("no numeric observations after cleaning")
+    _check_values(long)
     return long, note, debug
+
+
+def _check_values(long: pd.DataFrame) -> None:
+    """Refuse outputs whose 'values' are really stub labels.
+
+    A value series made only of whole years (1900-2100) is a period column
+    that slipped through as data; returning it would put years in 'deger'.
+    """
+    if "gosterge" not in long.columns:
+        return
+    for name, group in long.groupby("gosterge", sort=False, dropna=False):
+        values = group["deger"]
+        if len(values) >= 3 and values.map(looks_like_period).all():
+            raise TidyError(
+                f"value column '{str(name)[:60]}' holds only year numbers; the "
+                "layout was not recognised safely"
+            )
 
 
 def _clean_number(value: Any) -> Any:
@@ -371,17 +470,50 @@ def _clean_number(value: Any) -> Any:
     # in the sentence would concatenate into a fake number (e.g. "1515").
     if any(ch.isalpha() for ch in text):
         return None
-    text = text.replace("\xa0", "").replace(" ", "")
-    if "," in text and "." in text:                # 1.234,5 -> 1234.5
-        text = text.replace(".", "").replace(",", ".")
-    elif "," in text:
-        text = text.replace(",", ".")
-    text = re.sub(r"[^0-9.\-]", "", text)
-    return text or None
+    text = text.replace("\xa0", "").replace(" ", "").replace("\u2212", "-")
+    text = text.rstrip("*%")                      # footnote star, percent sign
+    # Only a plain signed number with ',' / '.' separators is accepted;
+    # anything else ('1/2', '15-19', '3:4') is a label, not a value --
+    # stripping its punctuation would invent a number.
+    if not re.fullmatch(r"[-+]?\d[\d.,]*", text):
+        return None
+    sign = "-" if text.startswith("-") else ""
+    digits = text.lstrip("+-")
+    if "," in digits and "." in digits:
+        if digits.rfind(",") > digits.rfind("."):   # 1.234,5 (TR)
+            digits = digits.replace(".", "").replace(",", ".")
+        else:                                        # 1,234.5 (EN)
+            digits = digits.replace(",", "")
+    elif digits.count(".") > 1:                      # 1.234.567 (TR thousands)
+        if not re.fullmatch(r"\d{1,3}(\.\d{3})+", digits):
+            return None
+        digits = digits.replace(".", "")
+    elif digits.count(",") > 1:                      # 1,234,567 (EN thousands)
+        if not re.fullmatch(r"\d{1,3}(,\d{3})+", digits):
+            return None
+        digits = digits.replace(",", "")
+    elif re.fullmatch(r"[1-9]\d{0,2}[.,]\d{3}", digits):
+        # '1.234' / '1,234' in a text cell: thousands or decimal depending
+        # on the table's language -- refuse to guess.
+        return None
+    elif "," in digits:                              # 12,5 (TR decimal)
+        digits = digits.replace(",", ".")
+    return sign + digits
 
 
-def tidy_istab(content: bytes) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Tidy a downloaded istab workbook. Returns (frame, report)."""
+def tidy_istab(content: bytes, debug: bool = False) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Tidy a downloaded istab workbook. Returns (frame, report).
+
+    The report's 'tidy_confidence' is 'yüksek' when every sheet was tidied
+    and each carries period information, 'orta' when every sheet was tidied
+    but some have no period (single-period/snapshot tables, check the
+    table title for the reference period), 'kısmi' when some sheets failed.
+    """
+    head = content[:8]
+    if head.startswith(b"%PDF"):
+        raise TidyError("file is a PDF, not a spreadsheet; use tuik_download_table_file")
+    if head.lstrip()[:1] == b"<":
+        raise TidyError("file is HTML, not a spreadsheet (portal error page?)")
     try:
         book = pd.read_excel(io.BytesIO(content), sheet_name=None, header=None)
     except Exception as exc:  # noqa: BLE001
@@ -412,12 +544,19 @@ def tidy_istab(content: bytes) -> tuple[pd.DataFrame, dict[str, Any]]:
         )
 
     merged = pd.concat(frames, ignore_index=True)
+    if failures or len(frames) != len(book):
+        confidence = "kısmi"
+    elif any(note.startswith("dönem bilgisi yok") for note in notes.values()):
+        confidence = "orta"
+    else:
+        confidence = "yüksek"
     report = {
         "n_sheets": len(book),
         "n_sheets_tidied": len(frames),
         "sheet_notes": notes,
         "sheet_failures": failures,
-        "tidy_confidence": "yüksek" if not failures and len(frames) == len(book) else "kısmi",
-        "debug_header": debug_by_sheet,
+        "tidy_confidence": confidence,
     }
+    if debug:
+        report["debug_header"] = debug_by_sheet
     return merged, report

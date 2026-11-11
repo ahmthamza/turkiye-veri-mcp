@@ -1,0 +1,631 @@
+<!DOCTYPE html><html><body>
+<table><tr><td onclick="RaporOlusturButonunaBasildi('14')" style="cursor:pointer; padding:5px; margin:1px; font-size:0.8em;" class="tabloListesiItem activatedItem" id="tabloListesiItem-14">
+                                <span class="text">Bilanço</span>
+                    </td></tr><tr><td onclick="RaporOlusturButonunaBasildi('15')" style="cursor:pointer; padding:5px; margin:1px; font-size:0.8em;" class="tabloListesiItem " id="tabloListesiItem-15">
+                                <span class="text">Kar/Zarar</span>
+                    </td></tr><tr><td onclick="RaporOlusturButonunaBasildi('16')" style="cursor:pointer; padding:5px; margin:1px; font-size:0.8em;" class="tabloListesiItem " id="tabloListesiItem-16">
+                                <span class="text">Bilan&#231;o Dışı İşlemler</span>
+                    </td></tr><tr><td onclick="RaporOlusturButonunaBasildi('17')" style="cursor:pointer; padding:5px; margin:1px; font-size:0.8em;" class="tabloListesiItem " id="tabloListesiItem-17">
+                                <span class="text">Diğer Bilgiler</span>
+                    </td></tr></table>
+<select class="tekliChosen" data-val="true" data-val-number="The field SeciliYil must be a number." data-val-required="The SeciliYil field is required." id="ddlYil" name="YilModel.SeciliYil" onchange="RaporOlusturButonunaBasildi2();" style="width:100px;"><option selected="selected" value="2026">2026</option>
+<option value="2025">2025</option>
+<option value="2024">2024</option>
+<option value="2023">2023</option>
+<option value="2022">2022</option>
+<option value="2021">2021</option>
+<option value="2020">2020</option>
+</select>
+<select class="tekliChosen" data-val="true" data-val-number="The field SeciliAy must be a number." data-val-required="The SeciliAy field is required." id="ddlAy" name="AyModel.SeciliAy" onchange="RaporOlusturButonunaBasildi2();" style="width:100px;"><option value="3">Mart</option>
+<option selected="selected" value="6">Haziran</option>
+<option value="9">Eyl&#252;l</option>
+<option value="12">Aralık</option>
+</select>
+<form action="/BultenAylikBdmk/tr/Gosterim/VYSBasitRaporGetir" method="post"><input name="__RequestVerificationToken" type="hidden" value="A0D99SDh50ymjyKQKlCAPrDMTfH6SiJk75BKyErs0doPbEJNCRhUjjpIkrt3KdRDSxIpv59kRHAyybnXw_wIPQtfwX7yaDt9NvcNIbUNyo81" />        <input name="tabloNo" id="tabloNoH" />
+        <input name="yil" id="yilH" />
+        <input name="ay" id="ayH" />
+        <input name="paraBirimi" id="paraBirimiH" />
+        <button id="BasitRaporGetirH"></button>
+</form>
+<table id="TabloBasitGosterim" class="table table-bordered table-condensed table-responsive verigostermetablosu ">
+                <thead>
+                    <tr>
+                        <th><p style="display:none">Sıra</p></th>
+                        <th>
+                            Kalem<text style="display:none">
+                                D&#246;nem: 2026/6,  Birim: <b>
+                                    Milyon                                         TL
+                                </b>
+                            </text>
+                        </th>
+                                <th>TP</th>                                <th>YP</th>                                <th>Toplam</th>                    </tr>
+                </thead>
+                <tbody>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">1</td>
+                                        <td style="font-weight:bold">
+
+                                            I. NAKİT DEĞERLER VE MERKEZ BANKASI
+                                        </td>
+                                                                                <td style="text-align:right;">404</td>
+                                            <td style="text-align:right;">18</td>
+                                            <td style="text-align:right;">421</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">2</td>
+                                        <td style="font-weight:bold">
+
+                                            II. GER&#199;EĞE UYGUN D FARKI K/ZA YANSITILAN FV (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">1.987</td>
+                                            <td style="text-align:right;">105</td>
+                                            <td style="text-align:right;">2.092</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">3</td>
+                                        <td style="">
+
+                                            2.1 Alım Satım Ama&#231;lı Finansal Varlıklar
+                                        </td>
+                                                                                <td style="text-align:right;">100</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">100</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">4</td>
+                                        <td style="">
+
+                                            2.2 Ger&#231;eğe Uygun Değer Farkı Kar/Zarara Yansıtılan O. Sınıflandırılan FV
+                                        </td>
+                                                                                <td style="text-align:right;">1.888</td>
+                                            <td style="text-align:right;">105</td>
+                                            <td style="text-align:right;">1.993</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">5</td>
+                                        <td style="">
+
+                                            2.3 Alım Satım Ama&#231;lı T&#252;rev Finansal Varlıklar
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">6</td>
+                                        <td style="font-weight:bold">
+
+                                            III. BANKALAR VE DİĞER MALİ KURULUŞLAR 
+                                        </td>
+                                                                                <td style="text-align:right;">2.728</td>
+                                            <td style="text-align:right;">18</td>
+                                            <td style="text-align:right;">2.745</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">7</td>
+                                        <td style="font-weight:bold">
+
+                                            IV. PARA PİYASALARINDAN ALACAKLAR
+                                        </td>
+                                                                                <td style="text-align:right;">30</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">30</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">8</td>
+                                        <td style="font-weight:bold">
+
+                                            V. SATILMAYA HAZIR FİNANSAL VARLIKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">8</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">8</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">9</td>
+                                        <td style="font-weight:bold">
+
+                                            VI. KREDİLER (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">50.184</td>
+                                            <td style="text-align:right;">578</td>
+                                            <td style="text-align:right;">50.762</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">10</td>
+                                        <td style="">
+
+                                            6.1 Krediler
+                                        </td>
+                                                                                <td style="text-align:right;">4.482</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">4.482</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">11</td>
+                                        <td style="">
+
+                                            6.2 Takipteki Krediler
+                                        </td>
+                                                                                <td style="text-align:right;">62.475</td>
+                                            <td style="text-align:right;">982</td>
+                                            <td style="text-align:right;">63.458</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">12</td>
+                                        <td style="">
+
+                                            6.3 &#214;zel Karşılıklar (-)
+                                        </td>
+                                                                                <td style="text-align:right;">16.773</td>
+                                            <td style="text-align:right;">404</td>
+                                            <td style="text-align:right;">17.178</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">13</td>
+                                        <td style="font-weight:bold">
+
+                                            VII. FAKTORİNG ALACAKLARI
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">14</td>
+                                        <td style="font-weight:bold">
+
+                                            VIII.VADEYE KADAR ELDE TUTULACAK YATIRIMLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">15</td>
+                                        <td style="font-weight:bold">
+
+                                            IX. İŞTİRAKLER (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">16</td>
+                                        <td style="font-weight:bold">
+
+                                            X. BAĞLI ORTAKLIKLAR  (Net) 
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">17</td>
+                                        <td style="font-weight:bold">
+
+                                            XI. BİRLİKTE KONTROL EDİLEN ORTAKLIKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">18</td>
+                                        <td style="font-weight:bold">
+
+                                            XII. KİRALAMA İŞLEMLERİNDEN ALACAKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">16</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">16</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">19</td>
+                                        <td style="font-weight:bold">
+
+                                            XIII. RİSKTEN KORUNMA AMA&#199;LI T&#220;REV FİNANSAL VARLIKLAR
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">20</td>
+                                        <td style="font-weight:bold">
+
+                                            XIV. MADDİ DURAN VARLIKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">2.273</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">2.273</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">21</td>
+                                        <td style="font-weight:bold">
+
+                                            XV. MADDİ OLMAYAN DURAN VARLIKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">207</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">207</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">22</td>
+                                        <td style="font-weight:bold">
+
+                                            XVI. VERGİ VARLIĞI 
+                                        </td>
+                                                                                <td style="text-align:right;">345</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">345</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">23</td>
+                                        <td style="">
+
+                                            16.1 Cari Vergi Varlığı
+                                        </td>
+                                                                                <td style="text-align:right;">109</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">109</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">24</td>
+                                        <td style="">
+
+                                            16.2 Ertelenmiş Vergi Varlığı
+                                        </td>
+                                                                                <td style="text-align:right;">237</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">237</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">25</td>
+                                        <td style="font-weight:bold">
+
+                                            XVII. SATIŞ AMA&#199;LI ELDE TUTULAN DURAN VARLIKLAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">4.279</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">4.279</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">26</td>
+                                        <td style="font-weight:bold">
+
+                                            XVIII. DİĞER AKTİFLER
+                                        </td>
+                                                                                <td style="text-align:right;">2.930</td>
+                                            <td style="text-align:right;">113</td>
+                                            <td style="text-align:right;">3.043</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">27</td>
+                                        <td style="font-weight:bold">
+
+                                            XIX. AKTİF TOPLAMI
+                                        </td>
+                                                                                <td style="text-align:right;">65.392</td>
+                                            <td style="text-align:right;">831</td>
+                                            <td style="text-align:right;">66.224</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">28</td>
+                                        <td style="font-weight:bold">
+
+                                            I. MEVDUAT
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">29</td>
+                                        <td style="font-weight:bold">
+
+                                            II. ALIM SATIM AMA&#199;LI T&#220;REV FİNANSAL BOR&#199;LAR
+                                        </td>
+                                                                                <td style="text-align:right;">1</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">1</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">30</td>
+                                        <td style="font-weight:bold">
+
+                                            III. ALINAN KREDİLER
+                                        </td>
+                                                                                <td style="text-align:right;">19.002</td>
+                                            <td style="text-align:right;">1.569</td>
+                                            <td style="text-align:right;">20.571</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">31</td>
+                                        <td style="font-weight:bold">
+
+                                            IV. PARA PİYASALARINA BOR&#199;LAR
+                                        </td>
+                                                                                <td style="text-align:right;">3.829</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">3.829</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">32</td>
+                                        <td style="font-weight:bold">
+
+                                            V. İHRA&#199; EDİLEN MENKUL KIYMETLER (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">7.588</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">7.588</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">33</td>
+                                        <td style="font-weight:bold">
+
+                                            VI. FONLAR
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">34</td>
+                                        <td style="font-weight:bold">
+
+                                            VII. MUHTELİF BOR&#199;LAR
+                                        </td>
+                                                                                <td style="text-align:right;">2.660</td>
+                                            <td style="text-align:right;">2.232</td>
+                                            <td style="text-align:right;">4.892</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">35</td>
+                                        <td style="font-weight:bold">
+
+                                            VIII. DİĞER YABANCI KAYNAKLAR
+                                        </td>
+                                                                                <td style="text-align:right;">49</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">49</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">36</td>
+                                        <td style="font-weight:bold">
+
+                                            IX. FAKTORİNG BOR&#199;LARI
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">37</td>
+                                        <td style="font-weight:bold">
+
+                                            X. KİRALAMA İŞLEMLERİNDEN BOR&#199;LAR (Net)
+                                        </td>
+                                                                                <td style="text-align:right;">351</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">351</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">38</td>
+                                        <td style="font-weight:bold">
+
+                                            XI.  RİSKTEN KORUNMA AMA&#199;LI T&#220;REV FİNANSAL BOR&#199;LAR
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">39</td>
+                                        <td style="font-weight:bold">
+
+                                            XII.  KARŞILIKLAR
+                                        </td>
+                                                                                <td style="text-align:right;">818</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">818</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">40</td>
+                                        <td style="font-weight:bold">
+
+                                            XIV. VERGİ BORCU
+                                        </td>
+                                                                                <td style="text-align:right;">5.831</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">5.831</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">41</td>
+                                        <td style="">
+
+                                            14.1 Cari Vergi Borcu
+                                        </td>
+                                                                                <td style="text-align:right;">417</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">417</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">42</td>
+                                        <td style="">
+
+                                            14.2 Ertelenmiş Vergi Borcu
+                                        </td>
+                                                                                <td style="text-align:right;">5.414</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">5.414</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">43</td>
+                                        <td style="font-weight:bold">
+
+                                            XV. SATIŞ AMA&#199;LI DURAN VARLIKLARA İLİŞKİN BOR&#199;LAR
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">44</td>
+                                        <td style="font-weight:bold">
+
+                                            XIII.  SERMAYE BENZERİ KREDİLER
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">45</td>
+                                        <td style="font-weight:bold">
+
+                                            XVI. &#214;ZKAYNAKLAR
+                                        </td>
+                                                                                <td style="text-align:right;">22.294</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">22.294</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">46</td>
+                                        <td style="">
+
+                                            16.1 &#214;denmiş Sermaye
+                                        </td>
+                                                                                <td style="text-align:right;">5.616</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">5.616</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">47</td>
+                                        <td style="">
+
+                                            16.2 Sermaye Yedekleri
+                                        </td>
+                                                                                <td style="text-align:right;">817</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">817</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">48</td>
+                                        <td style="">
+
+                                            16.3 K&#226;r Yedekleri
+                                        </td>
+                                                                                <td style="text-align:right;">6.085</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">6.085</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">49</td>
+                                        <td style="">
+
+                                            16.4 K&#226;r veya Zarar
+                                        </td>
+                                                                                <td style="text-align:right;">9.776</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">9.776</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-style:italic">50</td>
+                                        <td style="font-style:italic">
+                                                &nbsp;&nbsp;&nbsp;&nbsp;
+
+                                            16.4.1 Ge&#231;miş Yıllar K&#226;r ve Zararları
+                                        </td>
+                                                                                <td style="text-align:right;">6.580</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">6.580</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-style:italic">51</td>
+                                        <td style="font-style:italic">
+                                                &nbsp;&nbsp;&nbsp;&nbsp;
+
+                                            16.4.2 D&#246;nem Net K&#226;r ve Zararı
+                                        </td>
+                                                                                <td style="text-align:right;">3.196</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">3.196</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="">52</td>
+                                        <td style="">
+
+                                            16.5 Azınlık Hakkı
+                                        </td>
+                                                                                <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                            <td style="text-align:right;">0</td>
+                                </tr>
+                                <tr>
+                                    
+                                    <td style="font-weight:bold">53</td>
+                                        <td style="font-weight:bold">
+
+                                            XVII. PASİF TOPLAMI
+                                        </td>
+                                                                                <td style="text-align:right;">62.422</td>
+                                            <td style="text-align:right;">3.802</td>
+                                            <td style="text-align:right;">66.224</td>
+                                </tr>
+                </tbody>
+            </table>
+</body></html>

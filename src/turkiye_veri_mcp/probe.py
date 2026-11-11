@@ -20,22 +20,13 @@ from __future__ import annotations
 import argparse
 import io
 import random
-import time
 from collections import Counter
 from datetime import date
 
-import httpx
-
-from turkiye_veri_mcp.portal import PORTAL_BASE, _UA
-from turkiye_veri_mcp.portal import PortalClient
+from turkiye_veri_mcp.portal import PortalClient, download_file
 from turkiye_veri_mcp.tidy import TidyError, tidy_istab
 
 _TIMEOUT = 90.0
-_DOWNLOAD_HEADERS = {
-    "User-Agent": _UA,
-    "Accept": "*/*",
-    "Referer": f"{PORTAL_BASE}/tr/statistical-themes",
-}
 
 
 def _classify(content: bytes, content_type: str) -> tuple[str, str]:
@@ -111,7 +102,7 @@ def _classify(content: bytes, content_type: str) -> tuple[str, str]:
     return "clean", "single header row"
 
 
-def probe(per_theme: int = 8, lang: str = "tr", seed: int = 0, delay: float = 0.5) -> dict:
+def probe(per_theme: int = 8, lang: str = "tr", seed: int = 0) -> dict:
     random.seed(seed)
     portal = PortalClient()
     results: list[dict] = []
@@ -123,21 +114,13 @@ def probe(per_theme: int = 8, lang: str = "tr", seed: int = 0, delay: float = 0.
         print(f"  {theme['theme_name']}: {len(sample)}/{len(rows)} örnek")
         for row in sample:
             try:
-                with httpx.Client(
-                    timeout=_TIMEOUT, follow_redirects=True, headers=_DOWNLOAD_HEADERS
-                ) as client:
-                    response = None
-                    for attempt in range(3):
-                        response = client.get(row["url"])
-                        if response.status_code != 429:
-                            break
-                        time.sleep(delay * (2 ** (attempt + 2)))  # 429: back off harder
-                    response.raise_for_status()
-                kind, note = _classify(
-                    response.content, response.headers.get("content-type", "")
-                )
+                # download_file honours the portal's one-file-per-5-s limit
+                # (a faster request returns an HTML "please wait" page with
+                # HTTP 200, which earlier probes counted as files).
+                downloaded = download_file(row["url"], timeout=_TIMEOUT)
+                kind, note = _classify(downloaded.content, downloaded.content_type)
                 try:
-                    _, tidy_report = tidy_istab(response.content)
+                    _, tidy_report = tidy_istab(downloaded.content)
                     tidy_ok, tidy_note = True, tidy_report["tidy_confidence"]
                 except TidyError as exc:
                     tidy_ok, tidy_note = False, str(exc)[:200]
@@ -155,7 +138,6 @@ def probe(per_theme: int = 8, lang: str = "tr", seed: int = 0, delay: float = 0.
                     "tidy_note": tidy_note,
                 }
             )
-            time.sleep(delay)
     return {"results": results, "per_theme": per_theme}
 
 
@@ -219,15 +201,19 @@ def render(probe_result: dict) -> str:
     if tidy_results:
         tidy_success = sum(1 for r in tidy_results if r["tidy_ok"])
         n_tidy_total = len(tidy_results)
+        confidence = Counter(r["tidy_note"] for r in tidy_results if r["tidy_ok"])
         lines += [
             "",
             "## Gerçek tidy başarısı (tuik_get_table_data ile)",
             "",
             f"İndirilen **{n_tidy_total}** dosyanın **{tidy_success}** tanesi "
             f"(%{100 * tidy_success / n_tidy_total:.1f}) `tuik_get_table_data` "
-            "aracıyla bugün, kod değişikliği olmadan tidy uzun formata "
-            "çevrildi. Bu şekilsel sınıflandırmadan farklı olarak gerçek "
-            "aracın çalıştırılmasıyla ölçülmüştür.",
+            "aracıyla tidy uzun formata çevrildi (güven: "
+            + ", ".join(f"{k} {v}" for k, v in confidence.most_common())
+            + "). Kalanlar açık bir hata ile reddedildi (yanlış sayı "
+            "döndürmek yerine). Bu, dosya şekline bakan sınıflandırmadan "
+            "farklı olarak gerçek aracın çalıştırılmasıyla ölçülmüştür; "
+            "sayıların doğruluğunu tek tek kanıtlamaz.",
         ]
         failures = [r for r in tidy_results if not r["tidy_ok"]]
         if failures:

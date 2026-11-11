@@ -1,15 +1,17 @@
 # Türkiye Veri MCP
 
-Türkiye'nin dört resmi veri kaynağını tek [MCP (Model Context Protocol)](https://modelcontextprotocol.io) sunucusunda birleştirir:
+Türkiye'nin dört resmi veri kaynağını tek [MCP (Model Context Protocol)](https://modelcontextprotocol.io) sunucusunda birleştirir — 30 araç:
 
-- **TÜİK** — Türkiye İstatistik Kurumu'nun resmi veri portalı (veriportali.tuik.gov.tr) ve SDMX dataflow'ları (databrowser2.tuik.gov.tr) üzerinden 19 temadaki tüm tablolar: her kırılım, her dönem. Scraping yok.
-- **TCMB EVDS** — Merkez Bankası Elektronik Veri Dağıtım Sistemi (v3): tüm kategoriler, veri grupları ve binlerce seri; frekans dönüşümü (günlükten yıllığa), agregasyon (avg/min/max/first/last/sum) ve formüller (yüzde değişim, yıllık değişim, fark, hareketli ortalama/toplam) dahil API'nin tüm özellikleri.
-- **BDDK** — Bankacılık Düzenleme ve Denetleme Kurumu'nun FinTürk verisi: il bazında kredi/mevduat/bireysel bankacılık/oranlar/şube-nüfus/altın, 7 gösterge × 7 grup kırılımı (sektör, mevduat/katılım/kalkınma-yatırım bankaları, kamu/yerli özel/yabancı sermaye) × 81 il + yurt dışı. **EVDS'de bu il kırılımı yok.**
-- **HMB** — Hazine ve Maliye Bakanlığı bütçe istatistikleri: il bazında genel bütçe geliri (aylık) ve il × kategori bütçe gider/gelir/vergi/denge karşılaştırması, hem merkezi yönetim hem mahalli idareler (belediyeler, il özel idareleri) için. **EVDS'de bu il kırılımı yok** — EVDS'nin kamu maliyesi kategorisi yalnızca ulusal toplam seriler veriyor.
+- **TÜİK** — Türkiye İstatistik Kurumu'nun veri portalı (veriportali.tuik.gov.tr) ve veri tarayıcısı (databrowser2.tuik.gov.tr): 19 tema, 515 SDMX veri akışı (boyut/kod filtresiyle, her kırılım ve dönem) ve 1.700'den fazla `istab` Excel tablosu.
+- **TCMB EVDS** — Merkez Bankası Elektronik Veri Dağıtım Sistemi (v3): 154 kategori, 680 veri grubu, 54 binden fazla seri; frekans dönüşümü, agregasyon ve formüller dahil API'nin tüm özellikleri. 1000 satır sınırı otomatik sayfalanır.
+- **BDDK** — Bankacılık Düzenleme ve Denetleme Kurumu'nun beş etkileşimli bülteni: FinTürk (il bazında, çeyreklik), Aylık Bülten (17 tablo, 2002'den bugüne), Haftalık Bülten, Günlük Bülten ve banka dışı mali kuruluşlar (finansal kiralama, faktoring, finansman, varlık yönetim).
+- **HMB** — Hazine ve Maliye Bakanlığı Muhasebat istatistikleri: il bazında genel bütçe geliri (2004+), il × kategori bütçe tabloları (Konsolide 1990–2003, Merkezi Yönetim 2004+, Mahalli İdareler 2006+), vergi gelirlerinden aktarılan paylar ve sitenin yayımladığı diğer tüm dosyalar.
 
-**One MCP server for Turkish official data** — TUIK statistics, TCMB EVDS series, BDDK banking data and HMB budget statistics, all with province-level breakdowns EVDS doesn't have, plus tidy CSV export for research pipelines.
+**One MCP server for Turkish official data** — TUIK statistics, TCMB EVDS series, BDDK banking bulletins and HMB budget statistics, with province-level breakdowns EVDS doesn't have, plus tidy CSV export for research pipelines.
 
 > **Sorumluluk reddi:** Bu proje TÜİK, TCMB, BDDK veya HMB ile bağlantılı, onlar tarafından onaylanmış veya desteklenen bir proje değildir. Akademik araştırma amaçlı bağımsız bir araçtır.
+
+Ortak ilke: araçlar doğrulayamadığı sayıyı sessizce döndürmez; ya kaynakla karşılaştırıp not düşer ya da açık bir hata verir. Her araç sohbette küçük bir önizleme gösterir; çoğu `output_path` ile tam tabloyu CSV olarak yazar.
 
 ## Araçlar
 
@@ -18,39 +20,49 @@ Türkiye'nin dört resmi veri kaynağını tek [MCP (Model Context Protocol)](ht
 | Araç | Ne yapar |
 | --- | --- |
 | `tuik_list_themes` | 19 istatistik temasını listeler |
-| `tuik_list_tables` | Temadaki tabloları listeler (SDMX `dataflow` / indirilebilir `istab`) |
-| `tuik_search_tables` | Tüm temalarda tablo adı araması |
-| `tuik_describe_dataflow` | Boyutlar, kod listeleri, key şablonu |
-| `tuik_get_data` | SDMX verisi çekip önizler |
-| `tuik_download_data` | Tam veri setini tidy CSV olarak yazar |
-| `tuik_download_table_file` | `istab` dosyalarını (Excel) indirir |
-| `tuik_get_table_data` | `istab` Excel'ini **tidy uzun formata** çevirir (başlık/dipnot satırları, çok sayfalı dosyalar, çapraz tablolar) |
-| `usage_stats` | Bu sunucu örneğinin ne kadar kullanıldığını gösterir (araç çağrısı sayısı) |
+| `tuik_list_tables` | Temadaki tabloları listeler (`dataflow` / `istab` / `database`) |
+| `tuik_search_tables` | Tüm temalarda arama: Türkçe karakter duyarsız (`isgucu` → İşgücü), çok kelimeli, `resource_type` filtresi |
+| `tuik_describe_dataflow` | Veriyi indirmeden boyutları, verisi olan kodları (tr/en etiketli), dönem aralığını ve gözlem sayısını verir |
+| `tuik_get_data` | Veri akışını önizler; `filters="SEX=2;..."`, `start`/`end` sunucuda uygulanır |
+| `tuik_download_data` | Aynı seçimi tidy CSV olarak yazar |
+| `tuik_download_table_file` | `istab` dosyasını (Excel) indirir |
+| `tuik_get_table_data` | `istab` Excel'ini tidy uzun formata çevirir; `tidy_confidence` döndürür |
+| `usage_stats` | Bu sunucu örneğinin araç çağrısı sayacı |
 
 **EVDS** (ücretsiz `EVDS_API_KEY` gerekir):
 
 | Araç | Ne yapar |
 | --- | --- |
-| `evds_categories` | Ana kategorileri listeler (kur, faiz, enflasyon, ödemeler dengesi…) |
-| `evds_datagroups` | Veri gruplarını listeler/arar |
-| `evds_series_list` | Bir veri grubundaki tüm serileri kodlarıyla listeler |
-| `evds_search_series` | **Seri adına göre arama** (52 bin seri; ilk çağrıda indeks kurulur, sonra anında) |
-| `evds_get_datagroup_data` | Bir veri grubunun **tüm serilerini tek seferde** çeker (otomatik parçalama) |
-| `evds_get_data` | Çoklu seri; frekans + agregasyon + formül desteğiyle önizler (uzun/geniş sorgular otomatik parçalanır) |
-| `evds_download_data` | Aynı parametrelerle tidy CSV yazar |
+| `evds_categories` | Kategori ağacı (3 düzey) |
+| `evds_datagroups` | Veri gruplarını listeler/arar (sayfalı; birim, kaynak, son güncelleme) |
+| `evds_series_list` | Bir veri grubundaki serileri kodlarıyla listeler (sayfalı) |
+| `evds_series_info` | Seri üst verisi: birim, frekans, ilk/son gözlem, varsayılan agregasyon, kaynak |
+| `evds_search_series` | Seri adına/koduna göre arama (TR+EN, Türkçe karakter duyarsız; dizin arka planda kurulur) |
+| `evds_get_datagroup_data` | Bir veri grubunun tüm serilerini tek seferde çeker |
+| `evds_get_data` | Çoklu seri; frekans + agregasyon + formül, `last_n`, `format="long"`, `output_path` |
+| `evds_download_data` | Aynı parametrelerle CSV yazar |
 
 **BDDK** (anahtar gerektirmez):
 
 | Araç | Ne yapar |
 | --- | --- |
-| `bddk_get_data` | FinTürk il bazında bankacılık verisi — 7 tablo (`tablo_no` 1-7: Krediler, Mevduat, Bireysel Bankacılık, Seçilmiş Sektörel Krediler, Oranlar, Şubeler/Nüfus, Altın) × 7 grup (`taraf_list`: Sektör, Mevduat, Kalkınma ve Yatırım, Katılım, Yabancı, Kamu, Yerli Özel) × il (`sehir_list`: tek il, birden çok il, ya da `HEPSI`) |
+| `bddk_metadata` | Her bültenin tablo, grup (taraf) kodu, para birimi ve dönem listesini siteden canlı okur — önce bunu çağırın; grup kodları bültenden bültene farklıdır |
+| `bddk_get_data` | FinTürk il bazında veri: 7 tablo × 7 grup × 81 il + yurt dışı, 2007-12'den bugüne çeyreklik; `donem_bitis` ile zaman serisi |
+| `bddk_aylik_bulten` | Aylık Bülten'in 17 tablosu (bilanço, kâr-zarar, krediler, mevduat, sermaye yeterliliği, rasyolar…), TL/USD |
+| `bddk_haftalik_bulten` | Haftalık Bülten'in 9 tablosu (2014'ten bugüne) |
+| `bddk_haftalik_seri` | Haftalık Bülten'de tek kalemin zaman serisi |
+| `bddk_gunluk_bulten` | Günlük Bülten'in son günü; tek kalemin son ~7 iş günü |
+| `bddk_bdmk_bulten` | Finansal kiralama, faktoring, finansman ve varlık yönetim şirketleri |
 
 **HMB** (anahtar gerektirmez):
 
 | Araç | Ne yapar |
 | --- | --- |
-| `hmb_get_data` | İl bazında genel bütçe geliri (Tahakkuk/Tahsilat), aylık — il plaka kodu (`il_kodu`: "00" Merkez/ulusal toplam, "01"-"81") |
-| `hmb_get_karsilastirma` | İl × kategori bütçe crosstab tablosu (`tablo`): Merkezi Yönetim `gider`/`gelir`/`vergi`/`denge` (aylık kümülatif) veya Mahalli İdareler `mahalli_gider`/`mahalli_gelir`/`mahalli_denge` (üç aylık) |
+| `hmb_get_data` | İl bazında genel bütçe geliri (Tahakkuk/Tahsilat), aylık kümülatif, 2004'ten bugüne — `il_kodu`: "01"-"81", "00" = Merkez muhasebe birimleri (ulusal toplam değildir) |
+| `hmb_get_karsilastirma` | İl × kategori bütçe tabloları: `gider`/`gelir`/`vergi`/`denge` ve `mahalli_*`; 1990'dan bugüne |
+| `hmb_get_paylar` | Genel bütçe vergi gelirlerinden mahalli idare ve fonlara aktarılan paylar |
+| `hmb_list_tables` / `hmb_list_files` | Muhasebat sitesindeki tüm istatistik bölümlerini, klasörleri ve dosyaları gezer |
+| `hmb_get_file` | Herhangi bir HMB dosyası: tanınan düzen tidy tabloya çevrilir, tanınmayan gerekçesiyle reddedilir ve `ham_path` ile ham dosya olarak kaydedilir |
 
 ## Kurulum
 
@@ -58,7 +70,7 @@ Türkiye'nin dört resmi veri kaynağını tek [MCP (Model Context Protocol)](ht
 
 ### En kolay yol — hazır hosted sunucuya bağlanmak
 
-Kurulum gerektirmez, hiçbir platformda `uvx`/Python derdi yok. Sunucu zaten `https://turkiye-veri-mcp.onrender.com/mcp` adresinde çalışıyor. TÜİK araçları herkes için anahtarsız çalışır. EVDS araçları için üç platformun **desteği farklı** — aşağıda platform platform, hangisinin kendi anahtarınızı kullanmanıza izin verdiği net yazıyor.
+Kurulum gerektirmez, hiçbir platformda `uvx`/Python derdi yok. Sunucu zaten `https://turkiye-veri-mcp.onrender.com/mcp` adresinde çalışıyor. TÜİK, BDDK ve HMB araçları herkes için anahtarsız çalışır. EVDS araçları için üç platformun **desteği farklı** — aşağıda platform platform, hangisinin kendi anahtarınızı kullanmanıza izin verdiği net yazıyor.
 
 #### Claude Code (Mac ve Windows) — kendi EVDS anahtarınızla
 
@@ -134,21 +146,31 @@ claude mcp add turkiye-veri C:\turkiye-veri-mcp\run_turkiye.bat
 ## Örnek kullanım
 
 ```
-TÜİK'te işgücüyle ilgili hangi tablolar var? İl bazında olanı 2014'ten itibaren çek.
-EVDS'den TÜFE'yi yıllık yüzde değişimle, aylık frekansta 2010'dan bugüne al ve tufe.csv olarak kaydet.
-USD/TRY ile politika faizini aynı tabloda, aylık ortalama olarak indir.
-BDDK'dan 2026-6 dönemi için İstanbul'daki kamu bankalarının kredi hacmini çek.
+TÜİK'te aylık işgücü veri akışını bul, kadınlar için işsizlik oranını 2014'ten itibaren çek.
+EVDS'den USD/TRY'nin son 30 gözlemini getir; TÜFE'yi yıllık yüzde değişimle 2010'dan bugüne tufe.csv olarak kaydet.
+BDDK'dan İstanbul'daki kamu bankalarının kredi hacmini 2020-3'ten 2026-9'a çeyreklik seri olarak çek.
+BDDK Aylık Bülten'den sektörün takipteki alacaklarını son 24 ay için getir.
 HMB'den Ankara'nın (il kodu 06) bu yılki bütçe gelirini aylık olarak göster.
-İllere göre merkezi yönetim bütçe giderlerini (tablo: gider) karşılaştır, en yüksek 10 ili sırala.
+1998 yılı için illere göre konsolide bütçe giderlerini karşılaştır, en yüksek 10 ili sırala.
 ```
 
 ## Teknik notlar
 
-- TÜİK dataflow verisi `databrowser2.tuik.gov.tr`'nin JSON-stat 2.0 API'sinden gelir (eski SDMX servisi `nsiws.tuik.gov.tr` 2026-08 itibarıyla erişilemez durumda; kod önce yeni API'yi dener, olmazsa eskiye düşer).
-- EVDS v3 API'si kullanılır (`evds3.tcmb.gov.tr`); anahtar HTTP header'ında gönderilir ve TCMB sunucusunun gerektirdiği legacy SSL ayarı otomatik uygulanır.
-- BDDK verisi FinTürk'ün kendi arayüzünün kullandığı `POST bddk.org.tr/BultenFinturk/tr/Home/VeriGetir` (jqGrid formatı) üzerinden gelir. **BDDK sunucusu TLS el sıkışmasında eksik bir ara sertifika gönderiyor** (tarayıcılar bunu kendileri tamamlıyor, çoğu istemci tamamlamıyor); eksik ara sertifika (GlobalSign RSA OV SSL CA 2018) pakete gömülüp doğrulama tam olarak yapılıyor, gevşetilmiyor.
-- HMB verisi, sitenin JS arayüzünün kullandığı genel bir dosya listeleme API'sinden (`GET muhasebat.hmb.gov.tr/portal/v2/files?name=...&id=...`) geliyor; dönen HTML içindeki gerçek `.xls` linkleri indirilip ayrıştırılıyor. HMB'nin bazı `.xls` dosyaları `xlrd` ile açılamıyor (bozuk bir kayıt); `python_calamine` kullanılıyor.
-- Endpoint keşfinde Emrah Er'in [tuikr](https://github.com/emraher/tuikr) R paketinden ve Fatih Mete'nin [evds](https://github.com/fatihmete/evds) Python paketinden (her ikisi MIT) yararlanılmıştır. BDDK ve HMB endpoint'leri tarayıcı DevTools ile keşfedilmiştir, dokümante bir kaynakları yoktur.
+- **TÜİK:** veri akışları `databrowser2.tuik.gov.tr`'nin (TÜİK'in kendi veri tarayıcısının arka ucu) yapı, kod listesi ve SDMX-CSV indirme uçlarından gelir; eski `nsiws.tuik.gov.tr` servisi (HTTP 401) kullanılmaz. Her indirme TÜİK'in bildirdiği gözlem sayısıyla karşılaştırılır. Portal `istab` indirmelerini istemci başına 5 saniyede bir dosyayla sınırlar; araçlar bekler ve "lütfen bekleyiniz" sayfasını dosya diye kaydetmez.
+- **EVDS:** v3 API (`evds3.tcmb.gov.tr`); anahtar HTTP başlığında gönderilir, TCMB'nin gerektirdiği legacy SSL ayarı otomatik uygulanır. EVDS her yanıtı 1000 satırla sınırlar ve en yeni 1000'i sessizce döndürür; istemci geriye doğru sayfalayıp birleştirir.
+- **BDDK:** bültenlerin kendi arayüzlerinin kullandığı uçlar. Tablo, grup, dönem ve para birimi listeleri sayfalardan canlı okunur; gelen her yanıt istenen dönem/grup/tabloyla karşılaştırılır. TLS doğrulaması hiçbir koşulda kapatılmaz. İstekler arası 0,8 sn bekleme, çağrı başına 55 sn üst sınır.
+- **HMB:** `muhasebat.hmb.gov.tr/portal/v2` (sayfa ağacı + dosya listeleme). Klasör kimlikleri çalışma anında siteden keşfedilir; yeni yıllar kod değişikliği olmadan görünür. Birim etiketi olmayan dosyalar yalnızca kardeş bir tabloyla doğrulanabiliyorsa kabul edilir.
+- **Hata mesajları:** MCP SDK 2.x, `ToolError` olmayan istisnaların metnini gizler; tüm araç hataları `ToolError`'a çevrilerek kullanıcıya iletilir.
+- **Büyük veri:** barındırılan küçük sunucularda bellek için `TUIK_MAX_OBSERVATIONS` ortam değişkeniyle TÜİK indirme sınırı düşürülebilir (varsayılan 2 milyon gözlem; `render.yaml`'da 300 bin).
+- Endpoint keşfinde Emrah Er'in [tuikr](https://github.com/emraher/tuikr) R paketinden ve Fatih Mete'nin [evds](https://github.com/fatihmete/evds) Python paketinden (her ikisi MIT) yararlanılmıştır. TÜİK DataBrowser2, BDDK ve HMB uçları tarayıcı DevTools ile keşfedilmiştir; dokümante bir kaynakları yoktur ve kurumlar arayüzlerini değiştirirse bozulabilir.
+
+## Testler
+
+```bash
+uv pip install pytest
+pytest -m "not live"     # çevrimdışı birim testleri
+pytest                    # + canlı testler (internet; EVDS için EVDS_API_KEY)
+```
 
 ## Lisans
 
@@ -156,14 +178,15 @@ MIT
 
 ## Bilinen sınırlar
 
-- **TÜİK istab tidy'leme best-effort'tur.** `tuik_get_table_data` TÜİK'in yaygın şablonlarını çözer ve her çıktıda `tidy_confidence` döndürür; şablona uymayan tablolarda hata verip sizi ham dosyaya yönlendirir. Ne kadarının çözüldüğünü ölçmek için `turkiye-veri-probe` kullanın.
-- **TÜİK SDMX dataflow'larında şimdilik yalnızca `key="ALL"` desteklenir** (yeni `databrowser2` API'sinde daraltılmış key henüz yok). Sonucu kendiniz filtreleyin.
-- **MEDAS/Biruni veritabanları listelenir, veri çekilmez.** Portal ağacındaki `database` düğümleri link olarak döner.
+- **TÜİK:** katalogdaki 515 veri akışının 508'i canlı doğrulandı; `DF_UGOC_T1`–`T6` ve `T8` için TÜİK sunucusunda veri yok. Önizleme 300 bin, indirme 2 milyon gözlemle sınırlı.
+- **TÜİK istab tidy'leme best-effort'tur.** Bağımsız 134 dosyalık örneklemde 131 tablo dönüştürüldü (80 yüksek, 51 orta güven), 3'ü açık hatayla reddedildi. "orta" = tabloda dönem bilgisi yok, başlığa bakın. TR/EN etiketlerin alt alta yazıldığı tablolarda bir seri iki etiketle bölünebilir; bazı değer sütunları etiket sanılıp atlanabilir (veri eksik kalır, yanlış olmaz). Ham dosya her zaman `tuik_download_table_file` ile alınabilir.
+- **MEDAS/Biruni veritabanları (100 kayıt) yalnızca bağlantı olarak listelenir:** durum tutan bir web arayüzü, veri API'si yok.
 - **TÜİK mikroverisi kapsam dışıdır** (kurumsal başvuruyla dağıtılır).
-- **BDDK'da yalnızca FinTürk (İllere Göre) bağlı — diğer bültenler (Günlük/Haftalık/Aylık, Kredi Kartı Bilgileri) henüz eklenmedi.**
-- **HMB'de yalnızca 2026 yılı çalışıyor.** Diğer yıllar (2004-2025) ve diğer tablolar (İller İtibarıyla Konsolide Bütçe İstatistikleri 1990-2003, Genel Bütçe Vergi Gelirlerinden Mahalli İdare ve Fonlara Aktarılan Paylar) aynı `portal/v2/files` API'sini kullanıyor ama her biri kendi klasör "id"sini gerektiriyor — henüz keşfedilmedi.
-- **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code'da `X-Evds-Api-Key` header'ıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) şu an custom connector'larda özel header desteklemiyor, bu yüzden web'den bağlananlar otomatik olarak sunucu sahibinin kotasını paylaşır. Bu paylaşım bir güvenlik riski değildir (EVDS zaten herkese açık veri sunar) ama yoğun/toplu sorgulardan kaçının — kota tükenirse sunucu sahibinin de erişimi kesintiye uğrar.
-- **EVDS'de sunucu tarafı seri araması yoktur.** `evds_search_series` ilk çağrıda tüm veri gruplarını gezip yerel bir indeks kurar (birkaç dakika), sonrasında anında çalışır. İndeks 7 günden eskiyse kendini yeniler; hemen yenilemek için `refresh=True` kullanın.
+- **EVDS:** sunucu tarafı seri araması ve "son N gözlem" ucu yoktur; ikisi de istemci tarafında yapılır. `evds_search_series` dizini ilk kullanımda arka planda kurulur (yaklaşık 8 dakika), 7 günde bir yenilenir; dizin hazır değilken eşleşen veri grupları döner.
+- **BDDK:** Günlük Bülten'in geçmişi yayımlanmıyor (yalnızca son gün ve kalem başına son ~7 iş günü). Kredi kartı ücretleri bülteni (banka bazında ücret bilgisi) ve "Üç Aylık Temel Göstergeler" bağlı değil. FinTürk altın tablosu 2015-9'da başlar. Aylık Bülten'de 6 tablo yalnızca TL'dir.
+- **HMB:** `hmb_get_file` ile örneklenen 854 tablo türünden 298'i tabloya çevriliyor; kalanlar (muhasebe bazlı tablolar, GFS dosyaları, birçok ulusal Mahalli İdare/SGK tablosu, PDF bültenler) yalnızca ham dosya olarak iner. Mahalli İdareler il tabloları 2022 için birim etiketi olmadığından reddedilir. İl dosyalarının toplamı ile Merkezi Yönetim il tablosu 2006'dan itibaren %0,3–1,3 farklıdır (HMB'nin iki ayrı yayını).
+- **Hosted (paylaşılan) sunucuda EVDS anahtarı platforma göre değişir.** Claude Code'da `X-Evds-Api-Key` başlığıyla kendi anahtarınızı gönderebilirsiniz (bkz. Kurulum). Claude web (claude.ai) özel başlık desteklemediği için web'den bağlananlar sunucu sahibinin kotasını paylaşır; yoğun/toplu sorgulardan kaçının.
+- **Hosted sunucuda `output_path` sunucunun diskine yazar**, sizin bilgisayarınıza değil; dosya çıktısı için yerel kurulum kullanın.
 
 ## Kullanım istatistikleri
 

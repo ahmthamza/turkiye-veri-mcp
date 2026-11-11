@@ -10,7 +10,9 @@ src/turkiye_veri_mcp/
   sdmx.py     # TÜİK SDMX istemcisi
   tidy.py     # istab Excel -> tidy long format
   evds.py     # TCMB EVDS istemcisi
-  server.py   # araç tanımları (tuik_*, evds_*)
+  bddk.py     # BDDK bültenleri istemcisi
+  hmb.py      # HMB Muhasebat istemcisi
+  server.py   # araç tanımları (tuik_*, evds_*, bddk_*, hmb_*)
   audit.py    # kapsam raporu
   probe.py    # istab parse edilebilirlik sondası
 ```
@@ -31,7 +33,7 @@ Her sağlayıcı kendi modülünde durur; `server.py` yalnızca ince bir araç k
 
 4. **Anahtar gerekiyorsa** ortam değişkeni kullanın (`<SAGLAYICI>_API_KEY`) ve anahtar yokken ne yapılacağını söyleyen açıklayıcı bir hata döndürün. Anahtarı asla kod içine yazmayın.
 
-5. **Testleri ekleyin.** Canlı API'ye bağlı test yazmayın; sentetik yanıtlarla ayrıştırma ve parametre mantığını test edin (mevcut modüllerdeki desene bakın).
+5. **Testleri ekleyin** (`tests/test_<saglayici>.py`). Ayrıştırma ve parametre mantığını sentetik yanıtlarla çevrimdışı test edin; canlı uçlara giden testleri `@pytest.mark.live` ile işaretleyin.
 
 6. **Kapsamı ölçün.** Sağlayıcının yayınladığı toplam ile modülün eriştiğini sayan bir bölüm `audit.py`'ye eklenmeli. Bu projede kapsam iddia değil ölçümdür.
 

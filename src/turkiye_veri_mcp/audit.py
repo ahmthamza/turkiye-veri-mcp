@@ -7,12 +7,15 @@ Run on a machine with internet access (and EVDS_API_KEY for the EVDS side):
 
 The report classifies TUIK portal content into three access tiers:
 
-- Tier A (tam programatik): SDMX dataflows -> tidy DataFrame/CSV, all
-  dimensions and periods.
+- Tier A (tam programatik): SDMX dataflows via TUIK DataBrowser2 -> tidy
+  DataFrame/CSV, all dimensions and periods, filtered server-side.
 - Tier B (dosya erisimi): 'istab' downloads -> file retrieved, tidy not
   guaranteed (Excel layouts vary).
 - Tier C (listelenir, veri cekilmez): 'database' nodes -> legacy MEDAS
-  (Biruni) databases; we expose their links but do not fetch from them.
+  (Biruni) databases; we expose their links but do not fetch from them:
+  MEDAS is a stateful ZK 8.5 web application (all interaction is
+  server-side component events over /medas/zkau, no data API) with a
+  50,000-cell query cap, so it cannot be queried robustly.
 
 EVDS coverage is by construction the full API surface (the EVDS website is
 itself a client of the same API); the audit verifies this with live counts
@@ -22,7 +25,6 @@ of categories, datagroups and series.
 from __future__ import annotations
 
 import argparse
-import time
 from datetime import date
 
 from turkiye_veri_mcp.evds import EvdsClient, EvdsError
@@ -46,7 +48,10 @@ def tuik_inventory(lang: str = "tr") -> dict:
     return {"themes": per_theme, "totals": totals}
 
 
-def evds_inventory(delay: float = 0.4) -> dict:
+def evds_inventory(delay: float = 0.4, refresh: bool = False) -> dict:
+    """Live EVDS counts. Series are counted from the series-search index
+    (one serieList request per datagroup; resumable, failures retried once
+    and listed), so an audit right after an index build costs 3 requests."""
     client = EvdsClient()
     categories = client.categories()
     datagroups = client.datagroups(None)
@@ -54,23 +59,17 @@ def evds_inventory(delay: float = 0.4) -> dict:
     for group in datagroups:
         key = str(group["category_id"])
         per_category[key] = per_category.get(key, 0) + 1
-    n_series = 0
-    failures: list[str] = []
-    for group in datagroups:
-        code = group["datagroup_code"]
-        if not code:
-            continue
-        try:
-            n_series += len(client.series_list(code))
-        except Exception:  # noqa: BLE001 - count and continue
-            failures.append(str(code))
-        time.sleep(delay)  # be polite to TCMB
+    series = client.build_series_index(progress=True, delay=delay, refresh=refresh)
+    status = client.index_status()
     return {
         "n_categories": len(categories),
+        "n_top_categories": sum(1 for c in categories if c.get("level") == 1),
         "n_datagroups": len(datagroups),
-        "n_series": n_series,
+        "n_series": len(series),
+        "n_series_unique": len({s["serie_code"] for s in series}),
         "datagroups_per_category": per_category,
-        "serie_list_failures": failures,
+        "serie_list_failures": status["index_failed_datagroups"],
+        "index_age_days": status["index_age_days"],
     }
 
 
@@ -94,11 +93,13 @@ def render_report(tuik: dict | None, evds: dict | None, evds_error: str = "") ->
             f"(+ {totals['press']} haber bülteni, {totals['report']} rapor — veri değil, kapsam dışı)",
             "",
             f"- Tier A — SDMX dataflow: **{totals['dataflow']}** "
-            f"(%{100 * totals['dataflow'] / n_all:.1f}) — tüm kırılımlar ve tüm dönem tidy erişilir",
+            f"(%{100 * totals['dataflow'] / n_all:.1f}) — tüm kırılımlar ve tüm dönem tidy erişilir "
+            "(DataBrowser2; filtre/dönem sunucuda uygulanır)",
             f"- Tier B — istab dosya: **{totals['istab']}** "
             f"(%{100 * totals['istab'] / n_all:.1f}) — dosya indirilir",
             f"- Tier C — MEDAS/Biruni veritabanı: **{totals['database']}** "
-            f"(%{100 * totals['database'] / n_all:.1f}) — yalnızca link listelenir",
+            f"(%{100 * totals['database'] / n_all:.1f}) — yalnızca link listelenir "
+            "(MEDAS/Biruni durum tutan ZK web arayüzü; veri API'si yok)",
             "",
             "| Tema | dataflow | istab | database |",
             "| --- | --- | --- | --- |",
@@ -114,10 +115,13 @@ def render_report(tuik: dict | None, evds: dict | None, evds_error: str = "") ->
     lines.append("")
     if evds:
         lines += [
-            f"- Kategori: **{evds['n_categories']}** — tümü erişilebilir",
+            f"- Kategori: **{evds['n_categories']}** "
+            f"({evds.get('n_top_categories', '?')} ana kategori, 3 seviyeli ağaç) — tümü erişilebilir",
             f"- Veri grubu: **{evds['n_datagroups']}** — tümü erişilebilir",
-            f"- Seri: **{evds['n_series']}** — tümü erişilebilir "
-            "(8 frekans, 6 agregasyon, 8 formül dahil)",
+            f"- Seri: **{evds['n_series']}** "
+            f"({evds.get('n_series_unique', evds['n_series'])} tekil kod) — tümü erişilebilir "
+            "(8 frekans, 6 agregasyon, 8 dönüşüm formülü dahil; EVDS'nin 1000 satır sınırı "
+            "sayfalanarak aşılır)",
         ]
         if evds["serie_list_failures"]:
             lines.append(

@@ -1,5 +1,36 @@
 # Sürüm notları
 
+## v0.34.0 — Dört kaynağın tamamı canlı doğrulandı; 14 → 30 araç
+Dört kaynağın her veri yolu canlı sistemlere karşı baştan sona denendi, kök nedenler teşhis edilip düzeltildi, kapsam genişletildi. 200 test (çevrimdışı + canlı) eklendi.
+
+**TÜİK**
+- SDMX veri yolu çalışmıyordu: DataBrowser2'nin HTTP 500'ü aslında `DATAFLOW_NOT_FOUND` idi (örnek id kaldırılmış), hata metni atılıyordu; 401 veren eski nsiws servisine düşüş 120 sn'lik beklemeye yol açıyordu. İstemci, TÜİK'in kendi veri tarayıcısının kullandığı yapı / kod listesi / SDMX-CSV uçlarıyla yeniden yazıldı.
+- Eski JSON-stat yolu sessizce eksik veri veriyordu (`key='ALL'` çoğu akışta yalnızca arayüzün varsayılan seçimini döndürüyordu; bir akışta 3.672 yerine 312 değer). Artık her indirme TÜİK'in bildirdiği gözlem sayısıyla karşılaştırılıyor.
+- Yeni: `filters` (boyut=kod), sunucu tarafı `start`/`end`, `lang`; `tuik_describe_dataflow` veri indirmeden boyut ve kodları verir. Çıktı sütunları değişti: boyut kodu + `<BOYUT>_label`, `TIME_PERIOD`, `deger`.
+- Katalog: 515 veri akışı (508'i doğrulandı), Türkçe karakter duyarsız çok kelimeli arama, `database` kayıtları, klasör yolu.
+- istab: portalın 5 sn'lik indirme sınırı fark edildi — eski araçlar "lütfen bekleyiniz" HTML sayfasını Excel diye kaydediyordu. Tidy'leme sıkılaştırıldı (ay numarasını değer sanma gibi hatalar giderildi; belirsiz sayılar tahmin edilmez).
+
+**EVDS**
+- EVDS her yanıtı 1000 satırla sınırlayıp en yenileri sessizce döndürüyor; uzun günlük seriler eksik geliyordu. Artık otomatik sayfalanıyor (USD/TRY 1950–2026: 28.073 gün).
+- Parça birleşimlerinde yanlış sıralama ve çift satır, formüllü sütunların metin kalması, kategori filtresinin çalışmaması, bilinmeyen seri kodunun sessizce atlanması düzeltildi.
+- Yeni: `evds_series_info`; `evds_get_data`'da `output_path`, `format="long"`, `last_n`; sayfalı ve zengin listeler; Türkçe karakter duyarsız, arka planda kurulan arama dizini.
+- Davranış değişikliği: `end` boşsa artık bugün (eskiden `start`); bilinmeyen seri kodu hata verir.
+
+**BDDK**
+- HTTP 500'ün kök nedeni: boş dönem ve "HEPSI" (noktasız I) gönderilmesi. Varsayılan dönem artık son yayımlanan çeyrek, tüm iller değeri "HEPSİ". TLS: BDDK artık tam zincir gönderiyor; doğrulamasız yedek yol kaldırıldı.
+- Yeni araçlar: `bddk_metadata`, `bddk_aylik_bulten`, `bddk_haftalik_bulten`, `bddk_haftalik_seri`, `bddk_gunluk_bulten`, `bddk_bdmk_bulten`. `bddk_get_data`'da dönem aralığı.
+
+**HMB**
+- 2004–2005 değerleri 10^6 kat büyük geliyordu ("Milyar TL" eski lira = bin YTL; çarpan 1 olmalıydı). Düzeltildi.
+- Karşılaştırma tablolarında 2026 dışındaki yıllar bozuk ayrıştırılıyordu; yüzde sütunları "bin TL" etiketleniyordu; dipnot satırları il sayılıyordu. Düzeltildi.
+- Klasör kimlikleri artık siteden çalışma anında keşfediliyor. `hmb_get_karsilastirma` 1990'dan bugüne tüm yılları kapsıyor.
+- Yeni araçlar: `hmb_get_paylar`, `hmb_list_tables`, `hmb_list_files`, `hmb_get_file`. Çıktılarda `donem` (YYYY-AA), birim, kümülatif/aylık bilgisi ve Türkçe il adları.
+- Doğrulama: `hmb_get_data` 23 yıl × 82 kod = 1.886 dosyanın tamamı ayrıştırıldı.
+
+**Ortak**
+- MCP SDK 2.x araç hatalarının metnini gizliyordu; tüm hatalar artık kullanıcıya iletiliyor. SDK 1.x/2.x uyumlu import.
+- `TUIK_MAX_OBSERVATIONS` ortam değişkeni; kullanılmayan `pyjstat` bağımlılığı kaldırıldı; `tests/` eklendi.
+
 ## v0.33.0 — BDDK: HTTP 500 için oturum çerezi denemesi
 - Canlı testte `bddk_get_data` **HTTP 500** verdi (TLS sertifika hatası değil — o düzeltme tuttu, artık farklı bir sorun). Bugün TÜİK'te (sdmx.py, portal.py) görülen aynı örüntüden yola çıkarak: kod, VeriGetir'e soğuk (çerezsiz) POST atıyordu; BDDK'nın sunucusu önce sayfa ziyaretiyle oturum çerezi bekliyor olabilir.
 - Üç TLS kademesinin her biri artık POST'tan önce FinTürk sayfasını (`bddk.org.tr/BultenFinturk/tr`) ziyaret edip aynı bağlantıyla (çerezleriyle) devam ediyor.

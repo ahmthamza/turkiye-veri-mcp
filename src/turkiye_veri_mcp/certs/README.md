@@ -1,23 +1,24 @@
 # Gömülü ara sertifika
 
-`globalsign_rsa_ov_ssl_ca_2018.pem` — "GlobalSign RSA OV SSL CA 2018".
+`globalsign_gcc_r46_ov_tls_ca_2025.pem` — "GlobalSign GCC R46 OV TLS CA 2025"
+(veren: GlobalSign Root R46; geçerlilik 17 Eyl 2025 – 23 Haz 2029;
+SHA-256 D1:60:E2:DE:4E:56:CB:10:B6:6C:1C:B0:AD:CB:79:CF:93:C7:8D:CD:9D:B3:0C:20:18:22:02:62:C0:40:63:F9).
 
-Neden burada: bddk.org.tr sunucusu TLS el sıkışmasında yalnızca kendi
-(leaf) sertifikasını gönderiyor, onu imzalayan bu ara sertifikayı
-göndermiyor. Tarayıcılar eksik halkayı sertifikadaki AIA adresinden
-otomatik indirip zinciri tamamlıyor; Python'un `ssl` modülü bunu yapmaz
-ve `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`
-hatası verir.
+Durum (2026-11-11 kontrolü): bddk.org.tr Ekim 2026'dan beri bu ara
+sertifikanın imzaladığı yeni bir leaf kullanıyor (CN *.bddk.gov.tr, SAN'da
+www.bddk.org.tr ve bddk.org.tr var; 6 May 2027'ye kadar geçerli) ve
+zinciri eksiksiz gönderiyor. Yani düz `certifi` doğrulaması artık tek
+başına çalışıyor; bu dosya yalnızca sunucu ara sertifikayı yeniden
+göndermemeye başlarsa diye ek sigortadır.
 
-Kaynak: sertifikanın kendi AIA alanında yazan resmi adres --
-http://secure.globalsign.com/cacert/gsrsaovsslca2018.crt
+Eski `globalsign_rsa_ov_ssl_ca_2018.pem` kaldırıldı: yeni leaf onunla
+imzalanmıyor (sunucu onu hâlâ fazladan gönderiyor ama zincirde kullanılmıyor).
 
-Doğrulama (2026-08-05): bu dosya `-untrusted` olarak verildiğinde,
-bddk.org.tr'nin canlı leaf sertifikası certifi kök deposuna karşı
-`openssl verify` ile OK döndü. Yani bu, güvenilir GlobalSign Root CA -
-R3'e kadar giden gerçek zinciri tamamlıyor; doğrulamayı devre dışı
-bırakmıyoruz, eksik halkayı tamamlıyoruz.
+Kaynak: leaf sertifikanın AIA alanındaki resmi adres --
+http://secure.globalsign.com/cacert/gsgccr46ovtlsca2025.crt (DER → PEM).
+Sunucunun TLS el sıkışmasında gönderdiği kopyayla SHA-256 parmak izi birebir
+aynı; `openssl verify -CAfile certifi -untrusted bu_dosya leaf.pem` → OK.
 
-Geçerlilik: 21 Kasım 2028'e kadar. BDDK zincirini düzeltirse ya da
-sertifika değişirse bu dosya güncellenmeli; kod zaten önce normal
-doğrulamayı denediği için, bu dosya gereksizleştiğinde de sorun çıkmaz.
+Kod (bddk.py `ssl_context`) certifi kök deposuna bu dosyayı ekleyip her
+zaman TAM doğrulama yapar; doğrulamayı kapatan bir yedek yol yoktur.
+Doğrulama başarısız olursa araç açık bir hata verir ve veri döndürmez.
